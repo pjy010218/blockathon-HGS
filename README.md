@@ -24,6 +24,9 @@ frontend/
   lib/                        API client and shared types
 contracts/
   WaterAuditRegistry.sol      Minimal Ethereum hash registry
+governance_and_regulatory/
+  guidelines.md               Rules to build by; read before writing code
+  checklist.md                14-question regulatory readiness checklist
 ```
 
 ## Local development
