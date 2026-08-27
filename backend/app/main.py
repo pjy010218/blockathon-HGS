@@ -96,6 +96,7 @@ def create_record(payload: SignedRecordRequest) -> WaterQualityRecord:
         signature=payload.signature,
         claimed_address=payload.signer_address,
         signed_hash=payload.signed_content_hash,
+        signature_method=payload.signature_method,
         role="community",
         anchor=payload.anchor,
     )
@@ -107,8 +108,22 @@ def create_record(payload: SignedRecordRequest) -> WaterQualityRecord:
     status_code=status.HTTP_201_CREATED,
 )
 def import_ems(payload: EmsImportRequest) -> WaterQualityRecord:
+    if payload.signature_method != "personal_sign":
+        raise HTTPException(status_code=400, detail="Unsupported signature method.")
     event = payload.event.model_dump(mode="python")
-    canonical = enmods.normalize(event)
+    try:
+        canonical = enmods.normalize(event)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    record = _authenticated_ingest(
+        canonical,
+        signature=payload.signature,
+        claimed_address=payload.signer_address,
+        signed_hash=payload.signed_content_hash,
+        signature_method=payload.signature_method,
+        role="government",
+        anchor=payload.anchor,
+    )
     ingest.upsert_government_station(
         location_id=payload.event.Location_ID,
         name=payload.event.Location_Name,
@@ -116,14 +131,7 @@ def import_ems(payload: EmsImportRequest) -> WaterQualityRecord:
         longitude=payload.event.Location_Longitude,
         medium=payload.event.Medium,
     )
-    return _authenticated_ingest(
-        canonical,
-        signature=payload.signature,
-        claimed_address=payload.signer_address,
-        signed_hash=payload.signed_content_hash,
-        role="government",
-        anchor=payload.anchor,
-    )
+    return record
 
 
 @app.get("/api/v1/records/{record_id}", response_model=WaterQualityRecord)
@@ -217,11 +225,14 @@ def _authenticated_ingest(
     signature: str | None,
     claimed_address: str | None,
     signed_hash: str | None,
+    signature_method: str,
     role: str,
     anchor: bool,
 ) -> WaterQualityRecord:
     if not signature or not signed_hash:
         raise HTTPException(status_code=401, detail="A wallet signature over the content hash is required.")
+    if signature_method != "personal_sign":
+        raise HTTPException(status_code=400, detail="Unsupported signature method.")
 
     digest = content_hash_for_record(canonical)
     if signed_hash.removeprefix("0x").lower() != digest.lower():

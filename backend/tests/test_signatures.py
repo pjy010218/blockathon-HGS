@@ -4,7 +4,7 @@ from eth_account.messages import encode_defunct
 
 from app.models.schemas import Location, Measurement, SourceKind, SourceProvenance, WaterQualityRecordCreate
 from app.services.hashing import canonical_record_payload, sha256_hex
-from app.services.issuers import IssuerRegistry
+from app.services.issuers import IssuerConfigurationError, IssuerRegistry
 from app.services.signatures import SignatureError, recover_signer
 
 
@@ -54,3 +54,12 @@ def test_issuer_registry_accepts_matching_role() -> None:
     account = Account.create()
     registry = IssuerRegistry(community=[account.address], government=[])
     registry.require(account.address, "community")
+
+
+def test_issuer_registry_normalizes_case_and_rejects_invalid_addresses() -> None:
+    account = Account.create()
+    registry = IssuerRegistry(community=[account.address.lower()], government=[])
+    registry.require(account.address, "community")
+
+    with pytest.raises(IssuerConfigurationError):
+        IssuerRegistry(community=["not-an-address"], government=[])

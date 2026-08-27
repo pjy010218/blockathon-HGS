@@ -21,7 +21,7 @@ def test_normalize_maps_shared_parameters_and_keeps_raw_event() -> None:
     record = EnmodsAdapter().normalize(EVENT)
     assert record.source.kind.value == "government"
     assert record.source.provider == "enmods"
-    assert record.source.source_record_id == "E207969-2026-08-26T09:15:00-07:00"
+    assert record.source.source_record_id == "E207969-2026-08-26T09:15:00-07:00-surface water"
     assert record.location.latitude == 49.271
     assert record.location.name == "North Arm"
     fields = {item.field: item for item in record.measurements}
@@ -37,3 +37,11 @@ def test_normalize_maps_shared_parameters_and_keeps_raw_event() -> None:
 def test_unknown_parameters_are_not_invented_as_measurements() -> None:
     record = EnmodsAdapter().normalize(EVENT)
     assert all(item.field != "UNMAPPED" for item in record.measurements)
+
+
+def test_medium_participates_in_ems_source_record_identity() -> None:
+    freshwater = EnmodsAdapter().normalize(EVENT)
+    marine_event = {**EVENT, "Medium": "marine"}
+    marine = EnmodsAdapter().normalize(marine_event)
+
+    assert freshwater.source.source_record_id != marine.source.source_record_id
