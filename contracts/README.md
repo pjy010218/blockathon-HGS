@@ -120,13 +120,8 @@ Earlier deployments predate the issuer registry and are dead.
 ## For backend and frontend
 
 Everything a client needs to read the chain. Nothing here requires a wallet — all
-three lookups are `view` calls, so a public Sepolia RPC endpoint is enough.
-
-```
-chain id              11155111 (Sepolia)
-WaterAuditRegistry    0x0028fdb7dE6AC54FEE1658a93a5E9cE0d3B948B0
-VolunteerCredential   0x700B8E4ab00c6573911C219E1B74dABc66bdcdE9
-```
+three lookups are `view` calls, so a public Sepolia RPC endpoint is enough. Take
+the addresses and chain id from [Deployed](#deployed) above.
 
 Generate the ABI rather than hand-writing it:
 
