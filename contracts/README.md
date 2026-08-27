@@ -135,18 +135,16 @@ Two things a client must get right:
 - **`getAnchor` and `getAnchors` return a struct, not separate values.** The ABI
   entry has one output of type `tuple` with six components. Declaring six flat
   outputs decodes the return data incorrectly. `frontend/lib/blockchain.ts`
-  currently does exactly that and needs the tuple form.
+  uses the tuple form; treat `anchoredAt === 0` as unknown (`isPresentAnchor`).
 - **An unknown hash returns a zeroed struct, not an error.** Check
   `anchoredAt != 0`, or call `isAnchored` first, before showing any other field —
   otherwise `0x0000…` renders as a real submitter.
 
 ## TODO
 
+- [x] Frontend `getAnchor` ABI uses the six-field tuple (see `frontend/lib/blockchain.ts`)
+- [x] Backend can call the registry when `BLOCKCHAIN_MODE=ethereum` (still simulated by default)
 - [ ] Decide who holds the owner key, and record it in the governance checklist
-
-Not ours to fix, but worth flagging: `frontend/lib/blockchain.ts` declares
-`getAnchor` with four flat outputs instead of one struct, so it decodes wrong, and
-`backend/app/services/blockchain.py` is still simulated.
 
 ## Rules
 

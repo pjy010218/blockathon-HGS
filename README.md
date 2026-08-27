@@ -15,7 +15,7 @@ Tideproof is currently a hackathon prototype with a production-oriented integrat
 | Stations | Frontend integration boundary and graceful unavailable state | Government station registry and `GET /api/v1/stations` |
 | Leaderboard | Responsive placeholder contribution history | Rankings calculated from accepted, issuer-signed records |
 | API | Record creation, listing, lookup, verification, neutral comparison, and simulated anchoring | Dual community/EMS ingress, signatures, issuer roles, station matching, and unmatched filtering |
-| Blockchain | Minimal record-hash registry and simulated local adapter | Registered issuer roles, restricted anchoring, and an explicit relayer model |
+| Blockchain | WaterAuditRegistry with issuer roles on Sepolia; backend simulated by default, `BLOCKCHAIN_MODE=ethereum` on testnet | Signature-gated ingest using on-chain issuers as the API gate |
 
 The frontend is ahead of several backend capabilities. It prepares and signs the intended submission envelope, but the current API does not yet enforce signatures, issuer roles, station matching, or the optional anchor flag.
 
@@ -192,7 +192,7 @@ Comparison labels describe relationships only: `same_value_and_unit`, `different
 2. **Station-aware records** — add the station registry, 50-metre community matching, match metadata, and default viewer filtering.
 3. **Government ingress** — add streaming EMS import and signed daily REST pushes through the same canonical ingestion core.
 4. **Durability** — replace the in-memory store with PostgreSQL or another durable database and preserve complete upstream payloads.
-5. **Blockchain roles** — register and revoke community/government issuers, restrict anchoring, and document direct-wallet versus relayer behavior.
+5. **On-chain issuer checks at the API** — verify signatures against the deployed registry before ingest and anchoring.
 6. **Live viewer and leaderboard** — replace all placeholder records with API data and calculate contribution history from accepted submissions.
 
 ## Trust boundary
