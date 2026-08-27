@@ -1,0 +1,10 @@
+# Tooling for compiling, testing, and deploying the Solidity contracts.
+# Independent of backend/requirements.txt so contract work does not change
+# the API service dependencies.
+web3>=7,<8
+py-solc-x>=2,<3
+pytest>=8,<9
+
+# In-process EVM used by the contract tests; no external node required.
+eth-tester>=0.12,<0.14
+py-evm>=0.10,<0.14
