@@ -1,37 +1,132 @@
-# Water Audit Trail
+# Tideproof — Water Audit Trail
 
-An SDG 14 project for making water-quality data changes detectable while leaving interpretation to the reader.
+Tideproof is an SDG 14 project for preserving and comparing community and government water-quality records in British Columbia. It makes changes detectable, keeps provenance visible, and lets readers inspect differences without declaring which source is correct.
 
-## Purpose
+The project combines a public-facing Next.js application, a FastAPI ingestion and comparison service, and an Ethereum record-hash registry.
 
-Government, industrial, and community water data can differ. This project does not assign a trust score, select a preferred source, or tell users which record to believe. It preserves the source identity, original payload, provenance, and field-level differences so readers can inspect the evidence themselves.
+## Project status
 
-Each ingested record is normalized for comparison and hashed using deterministic JSON. The hash can be anchored to Ethereum through `WaterAuditRegistry.sol`. The raw data remains off-chain so it can be queried and compared without putting large payloads on-chain.
+Tideproof is currently a hackathon prototype with a production-oriented integration design.
+
+| Area | Available now | Planned next |
+|---|---|---|
+| Map | Interactive Vancouver-area map with clearly labeled prototype comparisons | Load only station-matched records and comparisons from the API |
+| Community data | Canonical form, client-side content hash, MetaMask signature, submission states, and optional anchor request | Backend signature verification, issuer authorization, station matching, and durable storage |
+| Stations | Frontend integration boundary and graceful unavailable state | Government station registry and `GET /api/v1/stations` |
+| Leaderboard | Responsive placeholder contribution history | Rankings calculated from accepted, issuer-signed records |
+| API | Record creation, listing, lookup, verification, neutral comparison, and simulated anchoring | Dual community/EMS ingress, signatures, issuer roles, station matching, and unmatched filtering |
+| Blockchain | Minimal record-hash registry and simulated local adapter | Registered issuer roles, restricted anchoring, and an explicit relayer model |
+
+The frontend is ahead of several backend capabilities. It prepares and signs the intended submission envelope, but the current API does not yet enforce signatures, issuer roles, station matching, or the optional anchor flag.
+
+## User experience
+
+### Map
+
+The default view centers on Vancouver and the Lower Mainland. Smiley markers indicate that the displayed community and EMS readings meet a comparison rule; frowny markers indicate that a difference needs review.
+
+The current markers are prototype data. The completed viewer will show only community records matched to a government station within 50 metres and will compare records that share that station identity.
+
+### Data
+
+Community contributors can:
+
+1. Connect a MetaMask wallet.
+2. Enter station context, observation time, medium, coordinates, and measurements.
+3. Build and hash a canonical record in the browser.
+4. Sign the content hash with MetaMask.
+5. Send the signed record to the community ingestion endpoint.
+6. Request blockchain anchoring when desired; the default is off.
+
+The backend remains authoritative for signature recovery, registered issuer status, duplicate detection, station matching, persistence, and anchoring.
+
+### Leaderboard
+
+The leaderboard is designed to recognize sustained participation and make contribution history easy to inspect. It is not a trust score: a registered issuer proves who submitted a record, not whether the reading is true.
+
+## Shared water-quality parameters
+
+Community submissions and EMS comparisons use this canonical intersection:
+
+| Canonical parameter | Community source | EMS codes | Display unit |
+|---|---|---|---|
+| pH | `ph` | `0004`, `PH-F` | pH |
+| Dissolved oxygen | `oxygen` | `DO-F` | mg/L |
+| Conductivity | `conductivity` | `0011`, `EC-F`, `SC-F` | µS/cm |
+| Water temperature | `water_temperature` | `TEMF` | °C |
+| Nitrate | `nitrates` | `1110` | mg/L |
+| Nitrite | `nitrites` | `1111` | mg/L |
+| Hardness | `hardness` | `1107` | mg/L as CaCO₃ |
+| E. coli | `e_coli` | `0147` | CFU/100mL; EMS may report MPN/100mL |
+
+Missing and not-detected values are never converted to zero. Unmapped upstream fields remain part of the retained raw payload where applicable.
+
+## Intended architecture
+
+```text
+Community form ── canonical record + wallet signature ──┐
+Community CSV import ────────────────────────────────────┤
+                                                        ├─► validation and issuer check
+Government EMS REST push ────────────────────────────────┤          │
+Government EMS CSV import ───────────────────────────────┘          ▼
+                                                             ingest and hash
+                                                                  │
+                                            station match ◄────────┤
+                                            optional anchor ◄──────┘
+```
+
+- Community contributors use an interactive MetaMask wallet.
+- Government automation uses a service wallet under the same signature and role rules.
+- Raw measurements remain off-chain.
+- Ethereum stores the content hash and minimal provenance metadata.
+- Community records remain stored when unmatched, but the default viewer hides them.
+- Station-match metadata sits outside the content-hash boundary so records can be rematched later.
+
+The approved ingress design is documented in [Import Interface Design](docs/superpowers/specs/2026-08-27-import-interface-design.md).
 
 ## Repository structure
 
 ```text
 backend/
-  app/main.py                 FastAPI routes and in-memory MVP store
-  app/models/schemas.py       Provenance, measurement, comparison, and anchor models
-  app/services/hashing.py     Deterministic SHA-256 content hashing
-  app/services/comparison.py  Neutral field-by-field comparison
-  app/services/blockchain.py  Ethereum adapter boundary; simulated locally by default
-  tests/test_api.py            API and missing-field behavior tests
+  app/main.py                  Current FastAPI routes and in-memory store
+  app/adapters/                Community and government adapter boundaries
+  app/models/                  Provenance, measurement, and comparison models
+  app/services/                Hashing, comparison, and blockchain services
+  tests/                       Backend API tests
 frontend/
-  app/                        Next.js viewer
-  components/                 Source record cards
-  lib/                        API client and shared types
+  app/                         Next.js application and visual system
+  components/                  Map and record interfaces
+  lib/                         API, signing, schema, and shared frontend types
 contracts/
-  WaterAuditRegistry.sol      Minimal Ethereum hash registry
-governance_and_regulatory/
-  guidelines.md               Rules to build by; read before writing code
-  checklist.md                14-question regulatory readiness checklist
+  WaterAuditRegistry.sol       Initial Ethereum content-hash registry
+docs/superpowers/specs/        Approved and draft technical designs
+governance_and_regulatory/     Governance guidelines and readiness checklist
 ```
+
+See [CHANGELOG.md](CHANGELOG.md) for a quick history of project progress and [DEV_GUIDE.md](DEV_GUIDE.md) for development controls and conventions.
 
 ## Local development
 
-### Backend
+### Requirements
+
+- Node.js 20 or newer
+- Python 3.11 or newer
+- MetaMask for the wallet interaction
+
+### Environment
+
+Copy the example configuration and adjust it if your ports differ:
+
+```bash
+cp .env.example .env
+set -a
+source .env
+set +a
+```
+
+Run the services from that shell so the variables are available to both processes. Alternatively, place frontend variables in `frontend/.env.local`. The frontend defaults to `http://localhost:8000` when `NEXT_PUBLIC_API_URL` is not set, and the backend allows `http://localhost:3000` by default through `CORS_ORIGINS`.
+
+### Start the backend
 
 ```bash
 cd backend
@@ -41,15 +136,14 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-Run tests with:
+Run backend tests:
 
 ```bash
+cd backend
 PYTHONPATH=. pytest
 ```
 
-### Frontend
-
-Node.js 20+ is recommended.
+### Start the frontend
 
 ```bash
 cd frontend
@@ -57,26 +151,66 @@ npm install
 npm run dev
 ```
 
-The UI expects the API at `http://localhost:8000`; override it with `NEXT_PUBLIC_API_URL`.
+Open [http://localhost:3000](http://localhost:3000).
 
-## API backbone
+Create a production build with:
 
-- `POST /api/v1/records` ingests a source-preserving record and computes its hash.
-- `GET /api/v1/records` lists records without merging away source differences.
-- `GET /api/v1/records/{id}/verify` recalculates the hash and reports whether it matches.
-- `POST /api/v1/records/{id}/anchor` invokes the blockchain adapter. Local mode is explicitly labeled `simulated`.
-- `POST /api/v1/comparisons` compares one government record with one community record field by field.
+```bash
+cd frontend
+npm run build
+npm run start
+```
 
-Comparison statuses are deliberately descriptive: `same_value_and_unit`, `different_value_or_unit`, `missing_from_government`, and `missing_from_community`. Missing fields are never converted to zero, null-equivalent equality, or a trust judgment.
+Do not run the development server and production build simultaneously because both use the frontend `.next` directory.
 
-## Data-source adapters to add next
+## Current API
 
-1. Add an EnMoDS/BC Data Catalogue adapter that stores the upstream URL, dataset identifier, retrieval timestamp, and original row payload.
-2. Add a DataStream/Water Rangers adapter using their open API and retain the upstream dataset/version identifiers.
-3. Map source fields into canonical fields without deleting unmapped fields; keep the original payload in `raw_payload`.
-4. Replace the simulated blockchain service with a Web3 transaction adapter that calls `anchorRecord(bytes32,string,string)` and stores the transaction hash.
-5. Move the in-memory record store to PostgreSQL or another durable store before deployment.
+| Method | Path | Current behavior |
+|---|---|---|
+| `GET` | `/health` | Reports API availability |
+| `POST` | `/api/v1/records` | Validates, stores, and hashes a record |
+| `GET` | `/api/v1/records` | Lists all in-memory records |
+| `GET` | `/api/v1/records/{id}` | Returns one record |
+| `GET` | `/api/v1/records/{id}/verify` | Recalculates and compares its content hash |
+| `POST` | `/api/v1/records/{id}/anchor` | Runs the configured blockchain adapter |
+| `POST` | `/api/v1/comparisons` | Returns neutral field-by-field differences |
+
+Comparison labels describe relationships only: `same_value_and_unit`, `different_value_or_unit`, `missing_from_government`, and `missing_from_community`.
+
+### Planned API additions
+
+| Method | Path | Intended behavior |
+|---|---|---|
+| `POST` | `/api/v1/records` | Require a community issuer signature and run station matching |
+| `POST` | `/api/v1/import/ems` | Normalize and ingest a signed government EMS event |
+| `GET` | `/api/v1/stations` | Provide government station context to the community form |
+| `GET` | `/api/v1/records?include_unmatched=true` | Include unmatched community records for debugging or demos |
+
+## Roadmap
+
+1. **Secure community ingress** — agree on cross-language canonical serialization, verify wallet signatures, enforce community issuer roles, and return actionable errors.
+2. **Station-aware records** — add the station registry, 50-metre community matching, match metadata, and default viewer filtering.
+3. **Government ingress** — add streaming EMS import and signed daily REST pushes through the same canonical ingestion core.
+4. **Durability** — replace the in-memory store with PostgreSQL or another durable database and preserve complete upstream payloads.
+5. **Blockchain roles** — register and revoke community/government issuers, restrict anchoring, and document direct-wallet versus relayer behavior.
+6. **Live viewer and leaderboard** — replace all placeholder records with API data and calculate contribution history from accepted submissions.
 
 ## Trust boundary
 
-The system can show that a submitted record has or has not changed since it was hashed and anchored. It cannot prove that a source submitted every measurement, that a sensor was calibrated, or that a reading is true. Those facts should remain visible as provenance and quality-control metadata for the reader to assess.
+Tideproof can demonstrate that a record has not changed since it was hashed and, when enabled, anchored. It can identify the registered wallet that submitted the record and preserve where the data came from.
+
+It cannot prove that:
+
+- every measurement was submitted;
+- a sensor was calibrated correctly;
+- a source is unbiased;
+- a measurement is scientifically true; or
+- a high contribution count makes an actor trustworthy.
+
+Those limits should remain visible through provenance, measurement methods, comparison details, and neutral interface language.
+
+## Governance and contributing
+
+Read [DEV_GUIDE.md](DEV_GUIDE.md) and the [governance and regulatory guidance](governance_and_regulatory/README.md) before changing ingestion, identity, data retention, or blockchain behavior.
+
+Do not commit credentials, private keys, `node_modules`, or generated `.next` files. Keep raw water-quality data off-chain and use clearly fake data in examples and demos.

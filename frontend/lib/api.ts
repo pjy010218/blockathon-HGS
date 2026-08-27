@@ -1,11 +1,46 @@
-import type { ComparisonResponse, WaterQualityRecord } from "./types";
+import type { SignedCommunitySubmission } from "./community-submission";
+import type { ComparisonResponse, GovernmentStation, WaterQualityRecord } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+export class ApiError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+  }
+}
 
 export async function listRecords(): Promise<WaterQualityRecord[]> {
   const response = await fetch(`${API_URL}/api/v1/records`, { cache: "no-store" });
   if (!response.ok) throw new Error("Unable to load records");
   return response.json();
+}
+
+export async function listStations(): Promise<GovernmentStation[]> {
+  const response = await fetch(`${API_URL}/api/v1/stations`, { cache: "no-store" });
+  if (!response.ok) throw new ApiError(response.status, "Station directory is not available yet");
+  return response.json();
+}
+
+export async function submitCommunityRecord(payload: SignedCommunitySubmission): Promise<WaterQualityRecord> {
+  const response = await fetch(`${API_URL}/api/v1/records`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: string } | null;
+    throw new ApiError(response.status, body?.detail ?? submissionErrorMessage(response.status));
+  }
+  return response.json();
+}
+
+function submissionErrorMessage(status: number): string {
+  if (status === 400) return "The signed record did not match the submitted record.";
+  if (status === 401) return "MetaMask signature verification failed.";
+  if (status === 403) return "This wallet is not registered as a community issuer.";
+  if (status === 409) return "This exact record has already been submitted.";
+  return "The record could not be submitted. Check the API connection and try again.";
 }
 
 export async function compareRecords(

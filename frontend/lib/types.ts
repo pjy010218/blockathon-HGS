@@ -21,11 +21,24 @@ export type WaterQualityRecord = {
   location: { name?: string | null; latitude: number; longitude: number };
   measurements: Measurement[];
   content_hash: string;
+  matched_station_id?: string | null;
+  matched_station_name?: string | null;
+  match_distance_m?: number | null;
+  match_status?: "matched" | "unmatched";
+  displayable?: boolean;
   blockchain: {
     status: "not_anchored" | "simulated" | "anchored";
     network?: string | null;
     transaction_hash?: string | null;
   };
+};
+
+export type GovernmentStation = {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  medium?: string | null;
 };
 
 export type ComparisonField = {
