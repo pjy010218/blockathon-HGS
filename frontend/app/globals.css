@@ -92,9 +92,12 @@ h1 em { color: var(--ocean); font-style: normal; font-weight: 400; }
 .popup-top h3 { margin: 1px 0 0; font-size: 18px; }
 .popup-status { margin: 14px 0 10px; padding: 8px 10px; background: #f2f7f6; border-radius: 7px; font-weight: 700; font-size: 12px; }
 .popup-status i { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--match); margin-right: 6px; }
-.popup-table { display: grid; grid-template-columns: 1.1fr 1fr 1fr; font-size: 11px; color: var(--muted); gap: 0; }
+.popup-status.review i { background: var(--review); }
+.popup-table { display: grid; grid-template-columns: 1.45fr .75fr .9fr; max-height: 276px; overflow-y: auto; padding-right: 5px; font-size: 11px; color: var(--muted); gap: 0; scrollbar-color: #a9bec4 transparent; scrollbar-width: thin; }
 .popup-row { display: contents; }
-.popup-row > * { border-top: 1px solid var(--line); padding: 7px 0; color: var(--ink); }
+.popup-row > * { border-top: 1px solid var(--line); padding: 7px 3px 7px 0; color: var(--ink); }
+.popup-row b { line-height: 1.15; }
+.popup-row b small { display: block; margin-top: 3px; color: var(--muted); font-size: 8px; font-weight: 500; }
 .marker-popup > p { margin: 7px 0 0; color: var(--muted); font-size: 10px; }
 
 .content-view { padding: clamp(48px, 7vw, 92px) clamp(20px, 5vw, 72px) 80px; }
@@ -140,8 +143,9 @@ textarea { resize: vertical; }
 .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 .metric-grid label > span { color: var(--muted); }
 .metric-grid label div { position: relative; }
-.metric-grid input { padding-right: 43px; }
-.metric-grid i { position: absolute; right: 10px; top: 12px; color: var(--muted); font-style: normal; font-size: 11px; }
+.metric-grid input { padding-right: 95px; }
+.metric-grid i { position: absolute; right: 10px; top: 12px; max-width: 82px; overflow: hidden; color: var(--muted); font-style: normal; font-size: 10px; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.metric-grid label > small { min-height: 12px; color: var(--muted); font-size: 9px; font-weight: 500; }
 .notes-label { margin-top: 20px; }
 .submit-row { margin-top: 22px; padding-top: 22px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 20px; }
 .submit-row p { margin: 0; color: var(--muted); font-size: 11px; display: flex; align-items: center; gap: 6px; }
