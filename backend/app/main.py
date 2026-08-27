@@ -1,21 +1,29 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.adapters.enmods import EnmodsAdapter
 from app.models.schemas import (
     ComparisonRequest,
     ComparisonResponse,
+    EmsImportRequest,
+    SignedRecordRequest,
+    SourceKind,
+    StationResponse,
     WaterQualityRecord,
     WaterQualityRecordCreate,
 )
 from app.services.blockchain import BlockchainService
+from app.services.hashing import content_hash_for_record
+from app.services.ingest import DuplicateRecord, IngestService
+from app.services.issuers import IssuerRegistry
 from app.services.comparison import compare_records
-from app.services.hashing import sha256_hex
+from app.services.signatures import SignatureError, recover_signer
+from app.services.stations import StationRegistry
 
 app = FastAPI(
     title="Community Water Audit Trail API",
@@ -35,10 +43,14 @@ app.add_middleware(
 )
 
 records: dict[UUID, WaterQualityRecord] = {}
+stations = StationRegistry()
+issuers = IssuerRegistry()
 blockchain = BlockchainService(
     mode=os.getenv("BLOCKCHAIN_MODE", "simulated"),
     network=os.getenv("BLOCKCHAIN_NETWORK", "local"),
 )
+ingest = IngestService(records, stations, blockchain)
+enmods = EnmodsAdapter()
 
 
 @app.get("/health")
@@ -46,9 +58,25 @@ def health() -> dict[str, str]:
     return {"status": "ok", "service": "water-audit-api"}
 
 
+@app.get("/api/v1/stations", response_model=list[StationResponse])
+def list_stations() -> list[StationResponse]:
+    return [
+        StationResponse(
+            id=station.id,
+            name=station.name,
+            latitude=station.latitude,
+            longitude=station.longitude,
+            medium=station.medium,
+        )
+        for station in stations.list()
+    ]
+
+
 @app.get("/api/v1/records", response_model=list[WaterQualityRecord])
-def list_records() -> list[WaterQualityRecord]:
-    return list(records.values())
+def list_records(include_unmatched: bool = Query(default=False)) -> list[WaterQualityRecord]:
+    if include_unmatched:
+        return list(records.values())
+    return [record for record in records.values() if record.displayable]
 
 
 @app.post(
@@ -56,16 +84,46 @@ def list_records() -> list[WaterQualityRecord]:
     response_model=WaterQualityRecord,
     status_code=status.HTTP_201_CREATED,
 )
-def create_record(payload: WaterQualityRecordCreate) -> WaterQualityRecord:
-    ingested_at = datetime.now(timezone.utc)
-    content = payload.model_dump(mode="json")
-    record = WaterQualityRecord(
-        **content,
-        ingested_at=ingested_at,
-        content_hash=sha256_hex(content),
+def create_record(payload: SignedRecordRequest) -> WaterQualityRecord:
+    if payload.source.kind != SourceKind.community:
+        raise HTTPException(
+            status_code=400,
+            detail="Government records use POST /api/v1/import/ems.",
+        )
+    canonical = _canonical_record(payload)
+    return _authenticated_ingest(
+        canonical,
+        signature=payload.signature,
+        claimed_address=payload.signer_address,
+        signed_hash=payload.signed_content_hash,
+        role="community",
+        anchor=payload.anchor,
     )
-    records[record.id] = record
-    return record
+
+
+@app.post(
+    "/api/v1/import/ems",
+    response_model=WaterQualityRecord,
+    status_code=status.HTTP_201_CREATED,
+)
+def import_ems(payload: EmsImportRequest) -> WaterQualityRecord:
+    event = payload.event.model_dump(mode="python")
+    canonical = enmods.normalize(event)
+    ingest.upsert_government_station(
+        location_id=payload.event.Location_ID,
+        name=payload.event.Location_Name,
+        latitude=payload.event.Location_Latitude,
+        longitude=payload.event.Location_Longitude,
+        medium=payload.event.Medium,
+    )
+    return _authenticated_ingest(
+        canonical,
+        signature=payload.signature,
+        claimed_address=payload.signer_address,
+        signed_hash=payload.signed_content_hash,
+        role="government",
+        anchor=payload.anchor,
+    )
 
 
 @app.get("/api/v1/records/{record_id}", response_model=WaterQualityRecord)
@@ -89,6 +147,7 @@ def anchor_record(record_id: UUID) -> WaterQualityRecord:
             record.content_hash,
             source=record.source.kind.value,
             source_record_id=record.source.source_record_id or str(record.id),
+            attributed_to=record.signer_address,
         )
     except (RuntimeError, ValueError) as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
@@ -101,10 +160,7 @@ def verify_record(record_id: UUID) -> dict[str, object]:
     if record is None:
         raise HTTPException(status_code=404, detail="Record not found")
 
-    payload = record.model_dump(
-        mode="json", exclude={"id", "ingested_at", "content_hash", "blockchain"}
-    )
-    recalculated_hash = sha256_hex(payload)
+    recalculated_hash = content_hash_for_record(record)
     return {
         "record_id": record.id,
         "stored_hash": record.content_hash,
@@ -120,6 +176,15 @@ def compare(request: ComparisonRequest) -> ComparisonResponse:
     community = records.get(request.community_record_id)
     if government is None or community is None:
         raise HTTPException(status_code=404, detail="One or both records not found")
+    if (
+        community.matched_station_id
+        and government.matched_station_id
+        and community.matched_station_id != government.matched_station_id
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Comparisons require community and government records from the same station.",
+        )
 
     return ComparisonResponse(
         government_record_id=government.id,
@@ -130,3 +195,57 @@ def compare(request: ComparisonRequest) -> ComparisonResponse:
             "Missing fields remain visible rather than being treated as zero or equal.",
         ],
     )
+
+
+def _canonical_record(payload: SignedRecordRequest) -> WaterQualityRecordCreate:
+    return WaterQualityRecordCreate.model_validate(
+        payload.model_dump(
+            exclude={
+                "signature",
+                "signer_address",
+                "signed_content_hash",
+                "signature_method",
+                "anchor",
+            }
+        )
+    )
+
+
+def _authenticated_ingest(
+    canonical: WaterQualityRecordCreate,
+    *,
+    signature: str | None,
+    claimed_address: str | None,
+    signed_hash: str | None,
+    role: str,
+    anchor: bool,
+) -> WaterQualityRecord:
+    if not signature or not signed_hash:
+        raise HTTPException(status_code=401, detail="A wallet signature over the content hash is required.")
+
+    digest = content_hash_for_record(canonical)
+    if signed_hash.removeprefix("0x").lower() != digest.lower():
+        raise HTTPException(
+            status_code=400,
+            detail="The signed record did not match the submitted record.",
+        )
+
+    try:
+        recovered = recover_signer(digest, signature)
+    except SignatureError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+
+    if claimed_address and recovered.lower() != claimed_address.lower():
+        raise HTTPException(status_code=401, detail="The signature does not match the claimed signer.")
+
+    try:
+        issuers.require(recovered, role)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+
+    try:
+        return ingest.ingest(canonical, signer=recovered, anchor=anchor)
+    except DuplicateRecord as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except (RuntimeError, ValueError) as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error

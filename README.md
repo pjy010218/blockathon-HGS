@@ -11,13 +11,15 @@ Tideproof is currently a hackathon prototype with a production-oriented integrat
 | Area | Available now | Planned next |
 |---|---|---|
 | Map | Interactive Vancouver-area map with clearly labeled prototype comparisons | Load only station-matched records and comparisons from the API |
-| Community data | Canonical form, client-side content hash, MetaMask signature, submission states, and optional anchor request | Backend signature verification, issuer authorization, station matching, and durable storage |
-| Stations | Frontend integration boundary and graceful unavailable state | Government station registry and `GET /api/v1/stations` |
+| Community data | Canonical form, MetaMask signature, backend recovery, issuer allowlist, 50 m station matching | Durable storage and CSV bulk import |
+| Stations | In-memory registry from EMS import; `GET /api/v1/stations` | PostgreSQL-backed station directory |
 | Leaderboard | Responsive placeholder contribution history | Rankings calculated from accepted, issuer-signed records |
-| API | Record creation, listing, lookup, verification, neutral comparison, and simulated anchoring | Dual community/EMS ingress, signatures, issuer roles, station matching, and unmatched filtering |
-| Blockchain | WaterAuditRegistry with issuer roles on Sepolia; backend simulated by default, `BLOCKCHAIN_MODE=ethereum` on testnet | Signature-gated ingest using on-chain issuers as the API gate |
+| API | Signed community ingest, signed EMS import, unmatched filtering, verification, comparison, optional anchoring | Streaming EMS CSV CLI and community CSV CLI |
+| Blockchain | WaterAuditRegistry with issuer roles on Sepolia; backend simulated by default, `BLOCKCHAIN_MODE=ethereum` on testnet | Query on-chain `isIssuer` instead of the env allowlist |
 
-The frontend is ahead of several backend capabilities. It prepares and signs the intended submission envelope, but the current API does not yet enforce signatures, issuer roles, station matching, or the optional anchor flag.
+The API verifies community and government signatures, checks issuer allowlists, matches community records to government stations within 50 metres, and hides unmatched community records from the default list. Bulk CSV CLIs and a durable database are still pending.
+
+Put the community MetaMask address in `COMMUNITY_ISSUERS` and the government service wallet in `GOVERNMENT_ISSUERS` (comma-separated). Unsigned pushes are rejected.
 
 ## User experience
 
@@ -107,26 +109,40 @@ See [CHANGELOG.md](CHANGELOG.md) for a quick history of project progress and [DE
 
 ## Local development
 
+Frontend (port 3000) and API (port 8000) run as separate processes. CORS already allows `http://localhost:3000`.
+
 ### Requirements
 
 - Node.js 20 or newer
 - Python 3.11 or newer
-- MetaMask for the wallet interaction
+- MetaMask (community form signing)
 
-### Environment
-
-Copy the example configuration and adjust it if your ports differ:
+### 1. Configure `.env`
 
 ```bash
 cp .env.example .env
+```
+
+**New, required for ingest:** replace the placeholder issuer addresses with real wallets. Unsigned or unknown wallets are rejected (`401` / `403`).
+
+| Variable | What to put there |
+|---|---|
+| `COMMUNITY_ISSUERS` | Your MetaMask address (comma-separated if several) |
+| `GOVERNMENT_ISSUERS` | The government/service wallet that will sign EMS imports |
+
+Leave `BLOCKCHAIN_MODE=simulated` unless you have Sepolia RPC, a testnet key, and `ETH_CONTRACT_ADDRESS` set. Mainnet anchoring is refused.
+
+Load the file in the shells that start the services:
+
+```bash
 set -a
 source .env
 set +a
 ```
 
-Run the services from that shell so the variables are available to both processes. Alternatively, place frontend variables in `frontend/.env.local`. The frontend defaults to `http://localhost:8000` when `NEXT_PUBLIC_API_URL` is not set, and the backend allows `http://localhost:3000` by default through `CORS_ORIGINS`.
+Alternatively, put `NEXT_PUBLIC_API_URL=http://localhost:8000` in `frontend/.env.local`. The frontend already defaults to that URL.
 
-### Start the backend
+### 2. Start the API
 
 ```bash
 cd backend
@@ -136,14 +152,14 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-Run backend tests:
+Check [http://localhost:8000/health](http://localhost:8000/health).
 
 ```bash
 cd backend
 PYTHONPATH=. pytest
 ```
 
-### Start the frontend
+### 3. Start the frontend (second terminal)
 
 ```bash
 cd frontend
@@ -153,7 +169,15 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-Create a production build with:
+Do not run `npm run dev` and `npm run start` at the same time; both use the frontend `.next` directory.
+
+### 4. Optional: seed a government station
+
+Community submits are stored even without a nearby EMS station, but `displayable` stays `false` and they stay off the default record list until a government station exists within **50 m**.
+
+Sign an EMS event with the government issuer key and `POST /api/v1/import/ems` (see Current API). After that, `GET /api/v1/stations` fills the form datalist, and a community reading at those coordinates can match.
+
+### Production frontend build
 
 ```bash
 cd frontend
@@ -161,39 +185,30 @@ npm run build
 npm run start
 ```
 
-Do not run the development server and production build simultaneously because both use the frontend `.next` directory.
-
 ## Current API
 
 | Method | Path | Current behavior |
 |---|---|---|
 | `GET` | `/health` | Reports API availability |
-| `POST` | `/api/v1/records` | Validates, stores, and hashes a record |
-| `GET` | `/api/v1/records` | Lists all in-memory records |
+| `POST` | `/api/v1/records` | Community ingest: signature + community issuer + 50 m station match |
+| `POST` | `/api/v1/import/ems` | Government EMS event: signature + government issuer; upserts the station |
+| `GET` | `/api/v1/stations` | Lists government stations |
+| `GET` | `/api/v1/records` | Lists displayable records; `include_unmatched=true` includes unmatched community rows |
 | `GET` | `/api/v1/records/{id}` | Returns one record |
 | `GET` | `/api/v1/records/{id}/verify` | Recalculates and compares its content hash |
 | `POST` | `/api/v1/records/{id}/anchor` | Runs the configured blockchain adapter |
 | `POST` | `/api/v1/comparisons` | Returns neutral field-by-field differences |
 
+Community POST bodies include `signature`, `signerAddress`, `signedContentHash`, `signatureMethod`, and optional `anchor`. Those envelope fields are not part of the content hash.
+
 Comparison labels describe relationships only: `same_value_and_unit`, `different_value_or_unit`, `missing_from_government`, and `missing_from_community`.
-
-### Planned API additions
-
-| Method | Path | Intended behavior |
-|---|---|---|
-| `POST` | `/api/v1/records` | Require a community issuer signature and run station matching |
-| `POST` | `/api/v1/import/ems` | Normalize and ingest a signed government EMS event |
-| `GET` | `/api/v1/stations` | Provide government station context to the community form |
-| `GET` | `/api/v1/records?include_unmatched=true` | Include unmatched community records for debugging or demos |
 
 ## Roadmap
 
-1. **Secure community ingress** — agree on cross-language canonical serialization, verify wallet signatures, enforce community issuer roles, and return actionable errors.
-2. **Station-aware records** — add the station registry, 50-metre community matching, match metadata, and default viewer filtering.
-3. **Government ingress** — add streaming EMS import and signed daily REST pushes through the same canonical ingestion core.
-4. **Durability** — replace the in-memory store with PostgreSQL or another durable database and preserve complete upstream payloads.
-5. **On-chain issuer checks at the API** — verify signatures against the deployed registry before ingest and anchoring.
-6. **Live viewer and leaderboard** — replace all placeholder records with API data and calculate contribution history from accepted submissions.
+1. **Bulk import CLIs** — community CSV and streaming EMS CSV through the same ingest core.
+2. **Durability** — replace the in-memory store with PostgreSQL or another durable database and preserve complete upstream payloads.
+3. **On-chain issuer checks** — query the deployed registry `isIssuer` instead of the env allowlist.
+4. **Live viewer and leaderboard** — replace remaining placeholder map/leaderboard data with API records.
 
 ## Trust boundary
 

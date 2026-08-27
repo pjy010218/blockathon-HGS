@@ -53,6 +53,57 @@ class WaterQualityRecordCreate(BaseModel):
     )
 
 
+class SignedRecordRequest(WaterQualityRecordCreate):
+    """Community ingest envelope. Signature fields are not part of the hash."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    signature: str | None = None
+    signer_address: str | None = Field(default=None, alias="signerAddress")
+    signed_content_hash: str | None = Field(default=None, alias="signedContentHash")
+    signature_method: str = Field(default="personal_sign", alias="signatureMethod")
+    anchor: bool = False
+
+
+class EmsObservation(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    Observed_Property_Name: str
+    Result: Any = None
+    Unit: str | None = None
+
+
+class EmsEvent(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    Location_ID: str
+    Location_Name: str | None = None
+    Location_Latitude: float
+    Location_Longitude: float
+    Observed_Date_Time: str
+    Medium: str | None = None
+    observations: list[EmsObservation] = Field(default_factory=list)
+
+
+class EmsImportRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    event: EmsEvent
+    signature: str | None = None
+    signer_address: str | None = Field(default=None, alias="signerAddress")
+    signed_content_hash: str | None = Field(default=None, alias="signedContentHash")
+    signature_method: str = Field(default="personal_sign", alias="signatureMethod")
+    anchor: bool = False
+
+
+class StationResponse(BaseModel):
+    id: str
+    name: str
+    latitude: float
+    longitude: float
+    medium: str | None = None
+
+
 class AnchorStatus(str, Enum):
     not_anchored = "not_anchored"
     simulated = "simulated"
@@ -73,6 +124,12 @@ class WaterQualityRecord(WaterQualityRecordCreate):
     ingested_at: datetime
     content_hash: str
     blockchain: BlockchainAnchor = Field(default_factory=BlockchainAnchor)
+    signer_address: str | None = None
+    displayable: bool = True
+    matched_station_id: str | None = None
+    matched_station_name: str | None = None
+    match_distance_m: float | None = None
+    match_status: str | None = None
 
 
 class ComparisonRequest(BaseModel):
