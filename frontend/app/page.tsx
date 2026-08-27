@@ -2,13 +2,13 @@
 
 import dynamic from "next/dynamic";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { ApiError, listStations, submitCommunityRecord } from "../lib/api";
+import { ApiError, listMapSites, listStations, submitCommunityRecord } from "../lib/api";
 import {
   buildCommunityRecord,
   signCommunityRecord,
   type WalletProvider,
 } from "../lib/community-submission";
-import type { GovernmentStation } from "../lib/types";
+import type { GovernmentStation, MapSite } from "../lib/types";
 import { WATER_QUALITY_PARAMETERS } from "../lib/water-quality-schema";
 
 const WaterMap = dynamic(() => import("../components/WaterMap"), {
@@ -122,10 +122,32 @@ export default function Home() {
 
 function MapView({ onOpenData }: { onOpenData: () => void }) {
   const [filter, setFilter] = useState<"all" | "match" | "review">("all");
+  const [sites, setSites] = useState<MapSite[]>([]);
+  const [mapNote, setMapNote] = useState("Loading comparisons…");
+
+  useEffect(() => {
+    let active = true;
+    void listMapSites()
+      .then((items) => {
+        if (!active) return;
+        setSites(items);
+        setMapNote(items.length ? "Imported pairs with stored proofs · records, not verdicts." : "No matched pairs yet. Start the API with DEMO_SEED=1 and DATABASE_URL.");
+      })
+      .catch(() => {
+        if (!active) return;
+        setSites([]);
+        setMapNote("API map comparisons are not available yet.");
+      });
+    return () => { active = false; };
+  }, []);
+
+  const matchCount = sites.filter((site) => site.status === "match").length;
+  const reviewCount = sites.filter((site) => site.status === "review").length;
+
   return <section className="map-view view-enter" aria-labelledby="map-title">
     <div className="map-heading"><div><p className="kicker"><span className="live-pulse" /> Live comparison map</p><h1 id="map-title">Where the water<br />records <em>agree.</em></h1></div><p className="map-intro">Community and official readings, compared site by site across British Columbia.</p></div>
-    <div className="map-frame"><WaterMap filter={filter} /><div className="map-tools" aria-label="Filter map markers"><button className={filter === "all" ? "selected" : ""} onClick={() => setFilter("all")}>All sites <b>8</b></button><button className={filter === "match" ? "selected" : ""} onClick={() => setFilter("match")}><span className="legend-face happy">☺</span> Match <b>5</b></button><button className={filter === "review" ? "selected" : ""} onClick={() => setFilter("review")}><span className="legend-face sad">☹</span> Needs review <b>3</b></button></div><div className="map-note"><Icon name="shield" /><span><b>Records, not verdicts.</b> Markers show whether two datasets meet a backend-defined match threshold.</span></div></div>
-    <div className="map-footer"><p><strong>Last comparison</strong> Today, 09:42 PT · Prototype records</p><button className="text-button" onClick={onOpenData}>Contribute a reading <Icon name="arrow" /></button></div>
+    <div className="map-frame"><WaterMap filter={filter} sites={sites} /><div className="map-tools" aria-label="Filter map markers"><button className={filter === "all" ? "selected" : ""} onClick={() => setFilter("all")}>All sites <b>{sites.length}</b></button><button className={filter === "match" ? "selected" : ""} onClick={() => setFilter("match")}><span className="legend-face happy">☺</span> Match <b>{matchCount}</b></button><button className={filter === "review" ? "selected" : ""} onClick={() => setFilter("review")}><span className="legend-face sad">☹</span> Needs review <b>{reviewCount}</b></button></div><div className="map-note"><Icon name="shield" /><span><b>Records, not verdicts.</b> {mapNote}</span></div></div>
+    <div className="map-footer"><p><strong>Last comparison</strong> {sites[0]?.compared ?? "Waiting for API data"}</p><button className="text-button" onClick={onOpenData}>Contribute a reading <Icon name="arrow" /></button></div>
   </section>;
 }
 

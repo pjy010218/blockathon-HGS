@@ -151,3 +151,25 @@ class ComparisonResponse(BaseModel):
     community_record_id: UUID
     fields: list[ComparisonField]
     notes: list[str] = Field(default_factory=list)
+
+
+class MapReading(BaseModel):
+    parameter: str
+    official: str
+    community: str
+
+
+class MapSite(BaseModel):
+    id: str
+    name: str
+    area: str
+    position: list[float]
+    status: str
+    matched_station_id: str
+    displayable: bool = True
+    compared: str
+    readings: list[MapReading]
+    community_record_id: UUID | None = None
+    government_record_id: UUID | None = None
+    community_hash: str | None = None
+    government_hash: str | None = None

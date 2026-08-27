@@ -94,7 +94,7 @@ One hash per sampling event — matches community row shape; group EMS long-form
 ## Demo caveats
 
 - **Geography:** No EMS hits at the three False Creek sites — compare regionally (Lower Mainland / Burrard) or mock community stations near EMS outfalls.
-- **Time:** Community ≈ 2019, EMS ≈ 2025+ — for demo, re-timestamp logically or frame as historical community baseline vs. current EMS feeds.
+- **Time:** Community source years are 2019; EMS is 2024–2026. The demo seed shifts each series so it **ends in 2025** (spacing preserved; original dates stay in `raw_payload`).
 - **Medium:** Community = ocean/marine; EMS sample = mostly waste/fresh — always store `medium` in the hashed payload.
 
 ---

@@ -44,6 +44,13 @@ class IssuerRegistry:
                 f"This wallet is not registered as a {role} issuer."
             )
 
+    def allow(self, address: str, role: str) -> None:
+        normalized = address.lower()
+        if role == "community":
+            self._community.add(normalized)
+        elif role == "government":
+            self._government.add(normalized)
+
     def reset(self, *, community: list[str], government: list[str]) -> None:
-        self._community = {address.lower() for address in community}
-        self._government = {address.lower() for address in government}
+        self._community = {item.lower() for item in community}
+        self._government = {item.lower() for item in government}

@@ -1,0 +1,6 @@
+Location_ID,Location_Name,Location_Latitude,Location_Longitude,Observed_Date_Time,Medium,Observed_Property_Name,Result_Value,Result_Unit,Detection_Condition
+E1,Kinder Morgan,49.3108,-123.1141,2026-07-20T10:13:00-07:00,Water - Fresh,PH-F,7.5,pH units,
+E1,Kinder Morgan,49.3108,-123.1141,2026-07-20T10:13:00-07:00,Water - Fresh,DO-F,8.2,mg/L,
+E1,Kinder Morgan,49.3108,-123.1141,2026-08-11T09:00:00-07:00,Water - Fresh,PH-F,7.6,pH units,
+E1,Kinder Morgan,49.3108,-123.1141,2026-07-20T10:13:00-07:00,Water - Fresh,UNMAPPED,1,unknown,
+E2,Skip Me,50.0,-119.0,2026-07-20T10:13:00-07:00,Water - Fresh,UNMAPPED,1,unknown,

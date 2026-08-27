@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from uuid import UUID
 
 from fastapi import FastAPI, HTTPException, Query, status
@@ -11,6 +12,7 @@ from app.models.schemas import (
     ComparisonRequest,
     ComparisonResponse,
     EmsImportRequest,
+    MapSite,
     SignedRecordRequest,
     SourceKind,
     StationResponse,
@@ -18,12 +20,13 @@ from app.models.schemas import (
     WaterQualityRecordCreate,
 )
 from app.services.blockchain import BlockchainService
+from app.services.comparison import compare_records
+from app.services.database import MemoryRecordStore, open_store
 from app.services.hashing import content_hash_for_record
 from app.services.ingest import DuplicateRecord, IngestService
 from app.services.issuers import IssuerRegistry
-from app.services.comparison import compare_records
+from app.services.map_sites import build_map_sites
 from app.services.signatures import SignatureError, recover_signer
-from app.services.stations import StationRegistry
 
 app = FastAPI(
     title="Community Water Audit Trail API",
@@ -36,21 +39,31 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000").split(","),
+    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001").split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-records: dict[UUID, WaterQualityRecord] = {}
-stations = StationRegistry()
+store = MemoryRecordStore() if "pytest" in sys.modules else open_store(os.getenv("DATABASE_URL"))
+if store is None:
+    raise RuntimeError("DATABASE_URL is required. Records are stored in Postgres, not in process memory.")
 issuers = IssuerRegistry()
 blockchain = BlockchainService(
     mode=os.getenv("BLOCKCHAIN_MODE", "simulated"),
     network=os.getenv("BLOCKCHAIN_NETWORK", "local"),
 )
-ingest = IngestService(records, stations, blockchain)
+ingest = IngestService(store, blockchain)
 enmods = EnmodsAdapter()
+
+if (
+    "pytest" not in sys.modules
+    and os.getenv("DEMO_SEED", "").strip().lower() in {"1", "true", "yes"}
+    and store.count() == 0
+):
+    from app.services.demo_seed import seed_demo
+
+    seed_demo(ingest, issuers)
 
 
 @app.get("/health")
@@ -68,15 +81,18 @@ def list_stations() -> list[StationResponse]:
             longitude=station.longitude,
             medium=station.medium,
         )
-        for station in stations.list()
+        for station in store.list_stations()
     ]
+
+
+@app.get("/api/v1/map", response_model=list[MapSite])
+def list_map_sites() -> list[MapSite]:
+    return build_map_sites(store.records_for_map())
 
 
 @app.get("/api/v1/records", response_model=list[WaterQualityRecord])
 def list_records(include_unmatched: bool = Query(default=False)) -> list[WaterQualityRecord]:
-    if include_unmatched:
-        return list(records.values())
-    return [record for record in records.values() if record.displayable]
+    return store.all_records(include_unmatched=include_unmatched)
 
 
 @app.post(
@@ -128,7 +144,7 @@ def import_ems(payload: EmsImportRequest) -> WaterQualityRecord:
 
 @app.get("/api/v1/records/{record_id}", response_model=WaterQualityRecord)
 def get_record(record_id: UUID) -> WaterQualityRecord:
-    record = records.get(record_id)
+    record = store.get_record(record_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Record not found")
     return record
@@ -136,7 +152,7 @@ def get_record(record_id: UUID) -> WaterQualityRecord:
 
 @app.post("/api/v1/records/{record_id}/anchor", response_model=WaterQualityRecord)
 def anchor_record(record_id: UUID) -> WaterQualityRecord:
-    record = records.get(record_id)
+    record = store.get_record(record_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Record not found")
     if record.blockchain.status.value in {"anchored", "simulated"}:
@@ -151,12 +167,13 @@ def anchor_record(record_id: UUID) -> WaterQualityRecord:
         )
     except (RuntimeError, ValueError) as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
+    store.save_record(record)
     return record
 
 
 @app.get("/api/v1/records/{record_id}/verify")
 def verify_record(record_id: UUID) -> dict[str, object]:
-    record = records.get(record_id)
+    record = store.get_record(record_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Record not found")
 
@@ -172,8 +189,8 @@ def verify_record(record_id: UUID) -> dict[str, object]:
 
 @app.post("/api/v1/comparisons", response_model=ComparisonResponse)
 def compare(request: ComparisonRequest) -> ComparisonResponse:
-    government = records.get(request.government_record_id)
-    community = records.get(request.community_record_id)
+    government = store.get_record(request.government_record_id)
+    community = store.get_record(request.community_record_id)
     if government is None or community is None:
         raise HTTPException(status_code=404, detail="One or both records not found")
     if (
