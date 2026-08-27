@@ -2,6 +2,12 @@
 
 Quick, chronological summaries of meaningful project changes. Implementation details belong in pull requests and technical specifications.
 
+## 2026-08-27 — Live frontend data
+
+- Connected the Map to display station-matched government and community comparisons from the API.
+- Connected the Leaderboard to accepted, issuer-signed community contribution records.
+- Added clear loading, unavailable, and empty-data states for both live views.
+
 ## 2026-08-27 — Signed ingress and station matching
 
 - Community `POST /api/v1/records` now requires an EIP-191 signature and a community issuer wallet.
@@ -32,4 +38,3 @@ Quick, chronological summaries of meaningful project changes. Implementation det
 - Added a simulated blockchain anchoring path and initial Ethereum registry contract.
 - Added initial community and government data-adapter boundaries.
 - Added governance and regulatory guidance for future development.
-

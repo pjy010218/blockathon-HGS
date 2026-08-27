@@ -2,13 +2,15 @@
 
 import dynamic from "next/dynamic";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { ApiError, listStations, submitCommunityRecord } from "../lib/api";
+import { ApiError, listRecords, listStations, submitCommunityRecord } from "../lib/api";
 import {
   buildCommunityRecord,
   signCommunityRecord,
   type WalletProvider,
 } from "../lib/community-submission";
 import type { GovernmentStation } from "../lib/types";
+import { buildContributorSummaries, buildMapMarkers, type ContributorSummary } from "../lib/live-data";
+import type { MapMarkerData } from "../components/WaterMap";
 import { WATER_QUALITY_PARAMETERS } from "../lib/water-quality-schema";
 
 const WaterMap = dynamic(() => import("../components/WaterMap"), {
@@ -22,14 +24,6 @@ type SubmissionState = {
   message?: string;
   contentHash?: string;
 };
-
-const leaders = [
-  { rank: 1, name: "Salish Seakeepers", handle: "0x8F2A…91C4", records: 184, streak: "28 weeks", place: "Vancouver Island", avatar: "SS" },
-  { rank: 2, name: "Fraser Watch", handle: "0x31BD…7A09", records: 157, streak: "19 weeks", place: "Lower Mainland", avatar: "FW" },
-  { rank: 3, name: "North Shore Streamkeepers", handle: "0x7C11…44BE", records: 132, streak: "16 weeks", place: "North Vancouver", avatar: "NS" },
-  { rank: 4, name: "Raincoast Field Lab", handle: "0x02DA…5F81", records: 98, streak: "14 weeks", place: "Central Coast", avatar: "RF" },
-  { rank: 5, name: "Kitsilano Citizen Science", handle: "0xA6E8…113D", records: 76, streak: "11 weeks", place: "Vancouver", avatar: "KC" },
-];
 
 function Icon({ name }: { name: "map" | "drop" | "trophy" | "wallet" | "arrow" | "shield" | "check" }) {
   const paths = {
@@ -122,10 +116,34 @@ export default function Home() {
 
 function MapView({ onOpenData }: { onOpenData: () => void }) {
   const [filter, setFilter] = useState<"all" | "match" | "review">("all");
+  const [markers, setMarkers] = useState<MapMarkerData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
+
+  async function loadComparisons() {
+    setLoading(true);
+    setError(null);
+    try {
+      const records = await listRecords();
+      setMarkers(await buildMapMarkers(records));
+      setRefreshedAt(new Date());
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Live comparisons could not be loaded.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { void loadComparisons(); }, []);
+
+  const matchCount = markers.filter((marker) => marker.status === "match").length;
+  const reviewCount = markers.filter((marker) => marker.status === "review").length;
+
   return <section className="map-view view-enter" aria-labelledby="map-title">
     <div className="map-heading"><div><p className="kicker"><span className="live-pulse" /> Live comparison map</p><h1 id="map-title">Where the water<br />records <em>agree.</em></h1></div><p className="map-intro">Community and official readings, compared site by site across British Columbia.</p></div>
-    <div className="map-frame"><WaterMap filter={filter} /><div className="map-tools" aria-label="Filter map markers"><button className={filter === "all" ? "selected" : ""} onClick={() => setFilter("all")}>All sites <b>8</b></button><button className={filter === "match" ? "selected" : ""} onClick={() => setFilter("match")}><span className="legend-face happy">☺</span> Match <b>5</b></button><button className={filter === "review" ? "selected" : ""} onClick={() => setFilter("review")}><span className="legend-face sad">☹</span> Needs review <b>3</b></button></div><div className="map-note"><Icon name="shield" /><span><b>Records, not verdicts.</b> Markers show whether two datasets meet a backend-defined match threshold.</span></div></div>
-    <div className="map-footer"><p><strong>Last comparison</strong> Today, 09:42 PT · Prototype records</p><button className="text-button" onClick={onOpenData}>Contribute a reading <Icon name="arrow" /></button></div>
+    <div className="map-frame"><WaterMap markers={markers} filter={filter} /><div className="map-tools" aria-label="Filter map markers"><button className={filter === "all" ? "selected" : ""} onClick={() => setFilter("all")}>All sites <b>{markers.length}</b></button><button className={filter === "match" ? "selected" : ""} onClick={() => setFilter("match")}><span className="legend-face happy">☺</span> Match <b>{matchCount}</b></button><button className={filter === "review" ? "selected" : ""} onClick={() => setFilter("review")}><span className="legend-face sad">☹</span> Needs review <b>{reviewCount}</b></button></div>{(loading || error || markers.length === 0) && <div className={`map-data-state ${error ? "error" : ""}`} role={error ? "alert" : "status"}><span>{loading ? "Reading the station ledger…" : error ? "API connection needed" : "No comparable stations yet"}</span><p>{loading ? "Pairing the newest EMS and community records." : error ?? "Import an EMS station, then submit a community reading within 50 m."}</p>{!loading && <button onClick={() => void loadComparisons()}>Refresh map</button>}</div>}<div className="map-note"><Icon name="shield" /><span><b>Records, not verdicts.</b> Marker status comes from the backend’s field comparison response.</span></div></div>
+    <div className="map-footer"><p><strong>Last API refresh</strong> {refreshedAt ? refreshedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Waiting for API"}</p><div className="map-footer-actions"><button className="text-button" onClick={() => void loadComparisons()}>Refresh</button><button className="text-button" onClick={onOpenData}>Contribute a reading <Icon name="arrow" /></button></div></div>
   </section>;
 }
 
@@ -154,10 +172,29 @@ function DataView({ wallet, walletError, submission, onConnect, onSubmit }: Data
 }
 
 function LeaderboardView() {
+  const [leaders, setLeaders] = useState<ContributorSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  async function loadLeaders() {
+    setLoading(true);
+    setError(null);
+    try {
+      setLeaders(buildContributorSummaries(await listRecords(true)));
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Contribution records could not be loaded.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { void loadLeaders(); }, []);
+
   return <section className="content-view leaderboard-view view-enter" aria-labelledby="leaderboard-title">
     <header className="page-heading leaderboard-heading"><div><p className="kicker">Community ledger · All time</p><h1 id="leaderboard-title">Proof of showing up.</h1></div><p>This board recognizes sustained, issuer-verified fieldwork. It confirms contribution history, not whether a reading is true.</p></header>
+    {(loading || error || leaders.length === 0) && <div className={`leader-data-state ${error ? "error" : ""}`} role={error ? "alert" : "status"}><div><b>{loading ? "Counting accepted records…" : error ? "API connection needed" : "No community contributions yet"}</b><p>{loading ? "Grouping signed submissions by issuer wallet." : error ?? "The first accepted community record will start this board."}</p></div>{!loading && <button className="primary-button" onClick={() => void loadLeaders()}>Refresh leaderboard</button>}</div>}
     <div className="podium">{leaders.slice(0, 3).map((leader) => <article className={`podium-card place-${leader.rank}`} key={leader.rank}><span className="rank-badge">{leader.rank}</span><div className="avatar">{leader.avatar}</div><div><h2>{leader.name}</h2><p>{leader.place}</p></div><strong>{leader.records}<small>verified records</small></strong></article>)}</div>
-    <div className="leader-table-wrap"><div className="leader-table-title"><div><h2>Active contributors</h2><p>Ranked by accepted, issuer-signed records</p></div><span>Updated today</span></div><div className="leader-table" role="table" aria-label="Contributor leaderboard"><div className="leader-row leader-labels" role="row"><span>Rank</span><span>Contributor</span><span>Wallet</span><span>Current streak</span><span>Records</span></div>{leaders.map((leader) => <div className="leader-row" role="row" key={leader.rank}><span className="table-rank">{String(leader.rank).padStart(2, "0")}</span><span className="contributor"><i>{leader.avatar}</i><span><b>{leader.name}</b><small>{leader.place}</small></span></span><span className="mono">{leader.handle}</span><span>{leader.streak}</span><strong>{leader.records}</strong></div>)}</div></div>
-    <p className="leader-note"><Icon name="shield" /> Rankings will be calculated from backend-verified contributions. Placeholder data is shown for interface development.</p>
+    {leaders.length > 0 && <div className="leader-table-wrap"><div className="leader-table-title"><div><h2>Active contributors</h2><p>Ranked by accepted, issuer-signed records</p></div><span>Live API records</span></div><div className="leader-table" role="table" aria-label="Contributor leaderboard"><div className="leader-row leader-labels" role="row"><span>Rank</span><span>Contributor</span><span>Wallet</span><span>Active weeks</span><span>Records</span></div>{leaders.map((leader) => <div className="leader-row" role="row" key={leader.rank}><span className="table-rank">{String(leader.rank).padStart(2, "0")}</span><span className="contributor"><i>{leader.avatar}</i><span><b>{leader.name}</b><small>{leader.place}</small></span></span><span className="mono">{leader.handle}</span><span>{leader.streak}</span><strong>{leader.records}</strong></div>)}</div></div>}
+    <p className="leader-note"><Icon name="shield" /> Counts include accepted community records, including unmatched submissions. They do not measure data quality.</p>
   </section>;
 }

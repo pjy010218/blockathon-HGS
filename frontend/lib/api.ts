@@ -9,9 +9,10 @@ export class ApiError extends Error {
   }
 }
 
-export async function listRecords(): Promise<WaterQualityRecord[]> {
-  const response = await fetch(`${API_URL}/api/v1/records`, { cache: "no-store" });
-  if (!response.ok) throw new Error("Unable to load records");
+export async function listRecords(includeUnmatched = false): Promise<WaterQualityRecord[]> {
+  const query = includeUnmatched ? "?include_unmatched=true" : "";
+  const response = await fetch(`${API_URL}/api/v1/records${query}`, { cache: "no-store" });
+  if (!response.ok) throw new ApiError(response.status, "Water-quality records are not available");
   return response.json();
 }
 
@@ -55,6 +56,9 @@ export async function compareRecords(
       community_record_id: communityRecordId,
     }),
   });
-  if (!response.ok) throw new Error("Unable to compare records");
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: string } | null;
+    throw new ApiError(response.status, body?.detail ?? "The station records could not be compared");
+  }
   return response.json();
 }

@@ -10,10 +10,10 @@ Tideproof is currently a hackathon prototype with a production-oriented integrat
 
 | Area | Available now | Planned next |
 |---|---|---|
-| Map | Interactive Vancouver-area map with clearly labeled prototype comparisons | Load only station-matched records and comparisons from the API |
+| Map | Live station-matched government/community comparisons from the API | Durable records and larger-scale map query support |
 | Community data | Canonical form, MetaMask signature, backend recovery, issuer allowlist, 50 m station matching | Durable storage and CSV bulk import |
 | Stations | In-memory registry from EMS import; `GET /api/v1/stations` | PostgreSQL-backed station directory |
-| Leaderboard | Responsive placeholder contribution history | Rankings calculated from accepted, issuer-signed records |
+| Leaderboard | Contribution counts derived from accepted, issuer-signed community records | Read contribution claims directly from `VolunteerCredential` |
 | API | Signed community ingest, signed EMS import, unmatched filtering, verification, comparison, optional anchoring | Streaming EMS CSV CLI and community CSV CLI |
 | Blockchain | WaterAuditRegistry with issuer roles on Sepolia; backend simulated by default, `BLOCKCHAIN_MODE=ethereum` on testnet | Query on-chain `isIssuer` instead of the env allowlist |
 
@@ -27,7 +27,7 @@ Put the community MetaMask address in `COMMUNITY_ISSUERS` and the government ser
 
 The default view centers on Vancouver and the Lower Mainland. Smiley markers indicate that the displayed community and EMS readings meet a comparison rule; frowny markers indicate that a difference needs review.
 
-The current markers are prototype data. The completed viewer will show only community records matched to a government station within 50 metres and will compare records that share that station identity.
+The viewer loads displayable records from the API, pairs the newest government and community records by station identity, and requests a neutral field comparison for each station. A site appears only when both sides of that pair are available.
 
 ### Data
 
@@ -44,7 +44,21 @@ The backend remains authoritative for signature recovery, registered issuer stat
 
 ### Leaderboard
 
-The leaderboard is designed to recognize sustained participation and make contribution history easy to inspect. It is not a trust score: a registered issuer proves who submitted a record, not whether the reading is true.
+The leaderboard groups accepted community records by the signer address recovered by the backend. It includes unmatched submissions because they are still valid contributions, while clearly separating contribution volume from data quality. It is not a trust score: a registered issuer proves who submitted a record, not whether the reading is true.
+
+### Frontend/API integration
+
+Every data-bearing frontend view now reads from or writes to the backend API:
+
+| Frontend action | API interaction | UI result |
+|---|---|---|
+| Load Map | `GET /api/v1/records` | Groups matched records and selects the newest government/community pair per station |
+| Compare Map records | `POST /api/v1/comparisons` | Converts backend comparison results into match, mismatch, or unavailable markers |
+| Load submission stations | `GET /api/v1/stations` | Populates the Data form's station selector |
+| Submit community data | Signed `POST /api/v1/records` | Sends the wallet-signed observation through backend validation and ingestion |
+| Load Leaderboard | `GET /api/v1/records?include_unmatched=true` | Ranks verified signer addresses by accepted community contribution count |
+
+The Map treats a pair as a complete match only when every comparison returned by the backend has `same_value_and_unit` status. Missing pairs, failed comparisons, empty responses, and API errors are shown explicitly instead of being replaced with demonstration data.
 
 ## Shared water-quality parameters
 
@@ -63,18 +77,24 @@ Community submissions and EMS comparisons use this canonical intersection:
 
 Missing and not-detected values are never converted to zero. Unmapped upstream fields remain part of the retained raw payload where applicable.
 
-## Intended architecture
+## Current application flow
 
 ```text
-Community form ── canonical record + wallet signature ──┐
-Community CSV import ────────────────────────────────────┤
-                                                        ├─► validation and issuer check
-Government EMS REST push ────────────────────────────────┤          │
-Government EMS CSV import ───────────────────────────────┘          ▼
-                                                             ingest and hash
-                                                                  │
-                                            station match ◄────────┤
-                                            optional anchor ◄──────┘
+Community user -> Next.js Data form -> MetaMask-signed record
+                                     -> POST /api/v1/records
+                                     -> validation, hashing, station matching, persistence
+                                     -> optional Ethereum anchor
+
+EMS importer -> signed POST /api/v1/import/ems
+             -> normalization, station upsert, and the same record pipeline
+
+GET /api/v1/records -> newest matched pair per station
+                    -> POST /api/v1/comparisons
+                    -> Map markers and comparison popups
+
+GET /api/v1/records?include_unmatched=true
+                    -> community records grouped by signer address
+                    -> Leaderboard rankings
 ```
 
 - Community contributors use an interactive MetaMask wallet.
@@ -98,9 +118,10 @@ backend/
 frontend/
   app/                         Next.js application and visual system
   components/                  Map and record interfaces
-  lib/                         API, signing, schema, and shared frontend types
+  lib/                         API, signing, live view models, schema, and shared frontend types
 contracts/
-  WaterAuditRegistry.sol       Initial Ethereum content-hash registry
+  WaterAuditRegistry.sol       Ethereum content-hash and issuer registry
+  VolunteerCredential.sol     On-chain volunteer contribution credentials
 docs/superpowers/specs/        Approved and draft technical designs
 governance_and_regulatory/     Governance guidelines and readiness checklist
 ```
@@ -175,7 +196,7 @@ Do not run `npm run dev` and `npm run start` at the same time; both use the fron
 
 Community submits are stored even without a nearby EMS station, but `displayable` stays `false` and they stay off the default record list until a government station exists within **50 m**.
 
-Sign an EMS event with the government issuer key and `POST /api/v1/import/ems` (see Current API). After that, `GET /api/v1/stations` fills the form datalist, and a community reading at those coordinates can match.
+Sign an EMS event with the government issuer key and `POST /api/v1/import/ems` (see Current API). After that, `GET /api/v1/stations` fills the form datalist, and a community reading at those coordinates can match. Once both records exist, refresh the Map to request their comparison and display the station marker.
 
 ### Production frontend build
 
@@ -203,12 +224,20 @@ Community POST bodies include `signature`, `signerAddress`, `signedContentHash`,
 
 Comparison labels describe relationships only: `same_value_and_unit`, `different_value_or_unit`, `missing_from_government`, and `missing_from_community`.
 
+## Current limitations
+
+- Records and stations use in-memory persistence unless replacement adapters are configured, so local API restarts clear runtime data.
+- Issuer authorization comes from backend environment configuration; it is not yet queried from the on-chain credential registry.
+- The Leaderboard represents verified accepted submissions, not certificate status or on-chain reputation.
+- The Map displays only stations with a usable government/community pair. Historical browsing and selectable comparison windows are not yet available.
+- Community and EMS bulk CSV import tools remain planned work; signed single-record routes are the current integration surface.
+
 ## Roadmap
 
 1. **Bulk import CLIs** — community CSV and streaming EMS CSV through the same ingest core.
 2. **Durability** — replace the in-memory store with PostgreSQL or another durable database and preserve complete upstream payloads.
 3. **On-chain issuer checks** — query the deployed registry `isIssuer` instead of the env allowlist.
-4. **Live viewer and leaderboard** — replace remaining placeholder map/leaderboard data with API records.
+4. **On-chain contribution claims** — read `VolunteerCredential` counts and credited records alongside API-derived contribution history.
 
 ## Trust boundary
 

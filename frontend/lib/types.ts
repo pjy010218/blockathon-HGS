@@ -10,6 +10,7 @@ export type Measurement = {
 
 export type WaterQualityRecord = {
   id: string;
+  ingested_at: string;
   source: {
     kind: SourceKind;
     provider: string;
@@ -21,6 +22,7 @@ export type WaterQualityRecord = {
   location: { name?: string | null; latitude: number; longitude: number };
   measurements: Measurement[];
   content_hash: string;
+  signer_address?: string | null;
   matched_station_id?: string | null;
   matched_station_name?: string | null;
   match_distance_m?: number | null;
@@ -30,6 +32,9 @@ export type WaterQualityRecord = {
     status: "not_anchored" | "simulated" | "anchored";
     network?: string | null;
     transaction_hash?: string | null;
+    contract_address?: string | null;
+    block_number?: number | null;
+    anchored_at?: string | null;
   };
 };
 
