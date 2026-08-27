@@ -115,6 +115,7 @@ Frontend (port 3000) and API (port 8000) run as separate processes. CORS already
 
 - Node.js 20 or newer
 - Python 3.11 or newer
+- Docker (local Postgres)
 - MetaMask (community form signing)
 
 ### 1. Configure `.env`
@@ -183,18 +184,33 @@ Open [http://localhost:3000](http://localhost:3000).
 
 Do not run `npm run dev` and `npm run start` at the same time; both use the frontend `.next` directory.
 
-### 5. Load demo data on the map
+### 5. Import the datasets
 
-`DEMO_SEED=1` imports:
+There is no separate import CLI. The API seeds Postgres **once**, when `water_records` is empty.
 
-- `backend/app/data/dataset_download_5399.csv` — Fraser Riverkeeper / Swim Drink Fish False Creek samples
-- `backend/data/this_yr.csv.gz` — BC EMS observations for this year (gitignored; copy from the Datasets folder). Shared Community↔EMS parameters are grouped into events and stored in Postgres. If the gzip is missing, the seed falls back to `backend/app/data/ems_lower_mainland.json`.
+**Copy the EMS gzip** (not in git, ~364 MB) to `backend/data/this_yr.csv.gz`. The community CSV is already in the repo.
 
-Each series is shifted so its last observation lands in **2025** (community 2019-12-11 → 2025-12-11; EMS 2026 dates move back one year). Relative spacing inside a dataset is unchanged; original dates stay in `raw_payload`. That shift happens **once**, on the first import into an empty database.
+```bash
+# from the repo root, after .env is loaded and Postgres is healthy
+cd backend
+source .venv/bin/activate
+DEMO_SEED=1 uvicorn app.main:app --reload --port 8000
+```
 
-Open a site on the map and use **Check proof**. That calls `GET /api/v1/records/{id}/verify` for the community and EMS records and shows whether the stored SHA-256 hashes still match.
+That import:
 
-There is no EMS station within 50 m of False Creek, so the demo copies nearest EMS chemistry onto the three community coordinates. The map then shows Olympic Village, Brokers Bay, and Vanier Park. ☺ means the two datasets match on shared parameters, ☹ means at least one value differs.
+- reads `backend/app/data/dataset_download_5399.csv` (Fraser Riverkeeper / False Creek)
+- streams `backend/data/this_yr.csv.gz` (shared Community↔EMS parameters, grouped into events)
+- writes rows to Postgres only (the API does not keep a copy in process memory)
+- shifts each series so it **ends in 2025**, only on that first empty import (original timestamps stay in `raw_payload`)
+
+Expect on the order of **~75k records** and a couple of minutes. If the gzip is missing, the seed falls back to `backend/app/data/ems_lower_mainland.json` (a Lower Mainland extract from the same gzip).
+
+**If the database already has rows**, the seed does nothing. Empty it and start the API again:
+
+```bash
+docker compose exec db psql -U water -d water_audit -c "TRUNCATE water_records, water_stations;"
+```
 
 Optional paths if you keep the files elsewhere:
 
@@ -204,9 +220,11 @@ EMS_CSV_PATH=/path/to/this_yr.csv.gz
 DEMO_END_YEAR=2025
 ```
 
-`GET /api/v1/map` is the payload the frontend uses. `GET /api/v1/stations` fills the contribution form.
+Open a site on the map and use **Check proof**. That calls `GET /api/v1/records/{id}/verify` and shows whether the stored SHA-256 hashes still match.
 
-Without demo seed, community submits are stored even without a nearby EMS station, but `displayable` stays `false` until a government station exists within **50 m**. You can also `POST /api/v1/import/ems` with a signed government event.
+The map shows only **comparison pairs** (community + EMS within 50 m). The community CSV has three False Creek sites, so you will see Olympic Village, Brokers Bay, and Vanier Park. There is no EMS station within 50 m of False Creek, so the demo copies nearest EMS chemistry onto those coordinates. Other EMS stations stay in Postgres and in `GET /api/v1/stations`. ☺ means the two datasets match on shared parameters; ☹ means at least one value differs.
+
+`GET /api/v1/map` is the payload the frontend uses. Without demo seed, community submits are stored even without a nearby EMS station, but `displayable` stays `false` until a government station exists within **50 m**. You can also `POST /api/v1/import/ems` with a signed government event.
 
 ### Production frontend build
 
