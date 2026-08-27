@@ -222,3 +222,7 @@ __marimo__/
 # Node / Next.js
 node_modules/
 .next/
+
+# macOS
+.DS_Store
+contracts/practice_tim/
