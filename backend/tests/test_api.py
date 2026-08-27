@@ -1,5 +1,6 @@
 from eth_account import Account
 from eth_account.messages import encode_defunct
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app, issuers, records, stations
@@ -116,6 +117,37 @@ def test_hash_mismatch_is_rejected() -> None:
     assert response.status_code == 400
 
 
+def test_unsupported_signature_method_is_rejected_for_community() -> None:
+    payload = _sign(
+        _record("community", [{"field": "ph", "value": 7.2, "unit": "pH"}]),
+        COMMUNITY_ACCOUNT,
+    )
+    payload["signatureMethod"] = "eip712"
+
+    response = client.post("/api/v1/records", json=payload)
+
+    assert response.status_code == 400
+
+
+def test_unsupported_signature_method_precedes_missing_authentication() -> None:
+    community_response = client.post(
+        "/api/v1/records",
+        json={
+            **_record("community", []),
+            "signatureMethod": "eip712",
+        },
+    )
+    ems_response = client.post(
+        "/api/v1/import/ems",
+        json={"event": _ems_event(), "signatureMethod": "eip712"},
+    )
+
+    assert community_response.status_code == 400
+    assert ems_response.status_code == 400
+    assert client.get("/api/v1/records", params={"include_unmatched": True}).json() == []
+    assert client.get("/api/v1/stations").json() == []
+
+
 def test_unmatched_community_is_stored_but_hidden() -> None:
     payload = _sign(
         _record("community", [{"field": "ph", "value": 7.2, "unit": "pH"}]),
@@ -175,6 +207,104 @@ def test_wrong_role_cannot_import_ems() -> None:
         },
     )
     assert response.status_code == 403
+
+
+def test_unsupported_signature_method_is_rejected_for_ems() -> None:
+    event = _ems_event()
+    from app.adapters.enmods import EnmodsAdapter
+
+    digest = content_hash_for_record(EnmodsAdapter().normalize(event))
+    signed = GOVERNMENT_ACCOUNT.sign_message(encode_defunct(primitive=bytes.fromhex(digest)))
+    response = client.post(
+        "/api/v1/import/ems",
+        json={
+            "event": event,
+            "signature": signed.signature.to_0x_hex(),
+            "signerAddress": GOVERNMENT_ACCOUNT.address,
+            "signedContentHash": digest,
+            "signatureMethod": "eip712",
+        },
+    )
+
+    assert response.status_code == 400
+    assert client.get("/api/v1/stations").json() == []
+
+
+@pytest.mark.parametrize(
+    "signature,signed_hash,account,expected_status",
+    [
+        ("0xdead", None, GOVERNMENT_ACCOUNT, 401),
+        (None, "f" * 64, GOVERNMENT_ACCOUNT, 400),
+    ],
+)
+def test_rejected_ems_request_cannot_add_station(
+    signature: str | None,
+    signed_hash: str | None,
+    account,
+    expected_status: int,
+) -> None:
+    event = _ems_event()
+    from app.adapters.enmods import EnmodsAdapter
+
+    canonical = EnmodsAdapter().normalize(event)
+    digest = content_hash_for_record(canonical)
+    if signature is None:
+        signed = account.sign_message(encode_defunct(primitive=bytes.fromhex(digest)))
+        signature = signed.signature.to_0x_hex()
+    response = client.post(
+        "/api/v1/import/ems",
+        json={
+            "event": event,
+            "signature": signature,
+            "signerAddress": account.address,
+            "signedContentHash": signed_hash or digest,
+            "signatureMethod": "personal_sign",
+        },
+    )
+
+    assert response.status_code == expected_status
+    assert client.get("/api/v1/stations").json() == []
+
+
+def test_unauthorized_ems_request_cannot_add_station() -> None:
+    event = _ems_event()
+    from app.adapters.enmods import EnmodsAdapter
+
+    digest = content_hash_for_record(EnmodsAdapter().normalize(event))
+    signed = OUTSIDER.sign_message(encode_defunct(primitive=bytes.fromhex(digest)))
+    response = client.post(
+        "/api/v1/import/ems",
+        json={
+            "event": event,
+            "signature": signed.signature.to_0x_hex(),
+            "signerAddress": OUTSIDER.address,
+            "signedContentHash": digest,
+            "signatureMethod": "personal_sign",
+        },
+    )
+
+    assert response.status_code == 403
+    assert client.get("/api/v1/stations").json() == []
+
+
+def test_ems_event_without_supported_measurements_is_rejected_without_state() -> None:
+    event = _ems_event()
+    event["observations"] = [
+        {"Observed_Property_Name": "UNMAPPED", "Result": 1, "Unit": "unknown"}
+    ]
+    response = client.post(
+        "/api/v1/import/ems",
+        json={
+            "event": event,
+            "signature": "0xdead",
+            "signedContentHash": "a" * 64,
+            "signatureMethod": "personal_sign",
+        },
+    )
+
+    assert response.status_code == 400
+    assert client.get("/api/v1/stations").json() == []
+    assert client.get("/api/v1/records", params={"include_unmatched": True}).json() == []
 
 
 def test_create_and_verify_record() -> None:

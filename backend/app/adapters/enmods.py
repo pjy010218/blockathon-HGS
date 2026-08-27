@@ -56,12 +56,18 @@ class EnmodsAdapter(WaterDataSourceAdapter):
                 )
             )
 
+        if not measurements:
+            raise ValueError("EMS event contains no supported water-quality measurements.")
+
         return WaterQualityRecordCreate(
             source=SourceProvenance(
                 kind=SourceKind.government,
                 provider="enmods",
                 dataset_id="ems",
-                source_record_id=f"{location_id}-{payload['Observed_Date_Time']}",
+                source_record_id=(
+                    f"{location_id}-{payload['Observed_Date_Time']}"
+                    f"-{payload.get('Medium') or ''}"
+                ),
             ),
             observed_at=observed_at_dt,
             location=Location(
