@@ -129,6 +129,25 @@ def test_unsupported_signature_method_is_rejected_for_community() -> None:
     assert response.status_code == 400
 
 
+def test_unsupported_signature_method_precedes_missing_authentication() -> None:
+    community_response = client.post(
+        "/api/v1/records",
+        json={
+            **_record("community", []),
+            "signatureMethod": "eip712",
+        },
+    )
+    ems_response = client.post(
+        "/api/v1/import/ems",
+        json={"event": _ems_event(), "signatureMethod": "eip712"},
+    )
+
+    assert community_response.status_code == 400
+    assert ems_response.status_code == 400
+    assert client.get("/api/v1/records", params={"include_unmatched": True}).json() == []
+    assert client.get("/api/v1/stations").json() == []
+
+
 def test_unmatched_community_is_stored_but_hidden() -> None:
     payload = _sign(
         _record("community", [{"field": "ph", "value": 7.2, "unit": "pH"}]),

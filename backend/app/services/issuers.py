@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-from eth_utils import is_address, to_checksum_address
+from web3 import Web3
 
 
 class IssuerConfigurationError(ValueError):
@@ -17,11 +17,11 @@ def _parse_addresses(value: str | None) -> set[str]:
         address = item.strip()
         if not address:
             continue
-        if not is_address(address):
+        if not Web3.is_address(address):
             raise IssuerConfigurationError(
                 "Issuer configuration contains an invalid Ethereum address."
             )
-        addresses.add(to_checksum_address(address).lower())
+        addresses.add(Web3.to_checksum_address(address).lower())
     return addresses
 
 
@@ -69,9 +69,9 @@ def _normalize_configured_addresses(addresses: list[str]) -> set[str]:
     normalized: set[str] = set()
     for address in addresses:
         address = address.strip()
-        if not is_address(address):
+        if not Web3.is_address(address):
             raise IssuerConfigurationError(
                 "Issuer configuration contains an invalid Ethereum address."
             )
-        normalized.add(to_checksum_address(address).lower())
+        normalized.add(Web3.to_checksum_address(address).lower())
     return normalized
