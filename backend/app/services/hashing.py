@@ -15,6 +15,30 @@ def sha256_hex(value: Any) -> str:
     return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
 
 
+CANONICAL_RECORD_FIELDS = (
+    "source",
+    "observed_at",
+    "location",
+    "measurements",
+    "metadata",
+    "raw_payload",
+)
+
+
+def canonical_record_payload(record: Any) -> dict[str, Any]:
+    """Fields that form the content hash. Match metadata stays outside."""
+
+    if hasattr(record, "model_dump"):
+        data = record.model_dump(mode="json")
+    else:
+        data = dict(record)
+    return {field: data[field] for field in CANONICAL_RECORD_FIELDS}
+
+
+def content_hash_for_record(record: Any) -> str:
+    return sha256_hex(canonical_record_payload(record))
+
+
 RECORD_HASH_BYTES = 32
 
 

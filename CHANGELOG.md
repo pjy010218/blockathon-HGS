@@ -2,6 +2,12 @@
 
 Quick, chronological summaries of meaningful project changes. Implementation details belong in pull requests and technical specifications.
 
+## 2026-08-27 — Signed ingress and station matching
+
+- Community `POST /api/v1/records` now requires an EIP-191 signature and a community issuer wallet.
+- Added `POST /api/v1/import/ems` for signed government events, `GET /api/v1/stations`, and 50 m station matching.
+- Unmatched community records stay stored but are hidden from the default record list.
+
 ## 2026-08-27 — Registry client alignment
 
 - Matched the frontend `getAnchor` ABI to the six-field on-chain Anchor tuple.
