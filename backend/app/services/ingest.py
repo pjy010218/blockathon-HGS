@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from uuid import UUID
 
 from app.models.schemas import SourceKind, WaterQualityRecord, WaterQualityRecordCreate
 from app.services.blockchain import BlockchainService
 from app.services.hashing import content_hash_for_record
-from app.services.stations import Station, StationRegistry
+from app.services.stations import Station
 
 
 class DuplicateRecord(Exception):
@@ -16,21 +15,12 @@ class DuplicateRecord(Exception):
 
 
 class IngestService:
-    def __init__(
-        self,
-        records: dict[UUID, WaterQualityRecord],
-        stations: StationRegistry,
-        blockchain: BlockchainService,
-    ) -> None:
-        self.records = records
-        self.stations = stations
+    def __init__(self, store, blockchain: BlockchainService) -> None:
+        self.store = store
         self.blockchain = blockchain
 
     def find_by_hash(self, content_hash: str) -> WaterQualityRecord | None:
-        for record in self.records.values():
-            if record.content_hash == content_hash:
-                return record
-        return None
+        return self.store.find_by_hash(content_hash)
 
     def ingest(
         self,
@@ -60,8 +50,55 @@ class IngestService:
                 attributed_to=signer,
             )
 
-        self.records[record.id] = record
+        self.store.save_record(record)
         return record
+
+    def ingest_many(
+        self,
+        payloads: list[WaterQualityRecordCreate],
+        *,
+        signer: str,
+        anchor: bool = False,
+        chunk_size: int = 200,
+    ) -> int:
+        """Persist many records without a per-row round trip.
+
+        Duplicate content hashes inside the batch are skipped. Existing database
+        rows are not queried first; use this on an empty store or accept unique
+        constraint errors from the database.
+        """
+
+        seen: set[str] = set()
+        batch: list[WaterQualityRecord] = []
+        stored = 0
+        for payload in payloads:
+            digest = content_hash_for_record(payload)
+            if digest in seen:
+                continue
+            seen.add(digest)
+            record = WaterQualityRecord(
+                **payload.model_dump(),
+                ingested_at=datetime.now(timezone.utc),
+                content_hash=digest,
+                signer_address=signer,
+            )
+            self._apply_station(record, payload)
+            if anchor:
+                record.blockchain = self.blockchain.anchor(
+                    digest,
+                    source=payload.source.kind.value,
+                    source_record_id=payload.source.source_record_id or str(record.id),
+                    attributed_to=signer,
+                )
+            batch.append(record)
+            if len(batch) >= chunk_size:
+                self.store.save_records(batch)
+                stored += len(batch)
+                batch = []
+        if batch:
+            self.store.save_records(batch)
+            stored += len(batch)
+        return stored
 
     def upsert_government_station(
         self,
@@ -72,19 +109,19 @@ class IngestService:
         longitude: float,
         medium: str | None,
     ) -> Station:
-        return self.stations.upsert(
-            Station(
-                id=location_id,
-                name=name or location_id,
-                latitude=latitude,
-                longitude=longitude,
-                medium=medium,
-            )
+        station = Station(
+            id=location_id,
+            name=name or location_id,
+            latitude=latitude,
+            longitude=longitude,
+            medium=medium,
         )
+        self.store.save_station(station)
+        return station
 
     def _apply_station(self, record: WaterQualityRecord, payload: WaterQualityRecordCreate) -> None:
         if payload.source.kind == SourceKind.community:
-            match = self.stations.match(payload.location.latitude, payload.location.longitude)
+            match = self.store.station_registry().match(payload.location.latitude, payload.location.longitude)
             if match is None:
                 record.displayable = False
                 record.match_status = "unmatched"

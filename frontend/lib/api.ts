@@ -1,5 +1,5 @@
 import type { SignedCommunitySubmission } from "./community-submission";
-import type { ComparisonResponse, GovernmentStation, WaterQualityRecord } from "./types";
+import type { ComparisonResponse, GovernmentStation, MapSite, WaterQualityRecord } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -18,6 +18,24 @@ export async function listRecords(): Promise<WaterQualityRecord[]> {
 export async function listStations(): Promise<GovernmentStation[]> {
   const response = await fetch(`${API_URL}/api/v1/stations`, { cache: "no-store" });
   if (!response.ok) throw new ApiError(response.status, "Station directory is not available yet");
+  return response.json();
+}
+
+export async function listMapSites(): Promise<MapSite[]> {
+  const response = await fetch(`${API_URL}/api/v1/map`, { cache: "no-store" });
+  if (!response.ok) throw new Error("Unable to load map comparisons");
+  return response.json();
+}
+
+export async function verifyRecord(recordId: string): Promise<{
+  record_id: string;
+  stored_hash: string;
+  recalculated_hash: string;
+  matches: boolean;
+  anchor: WaterQualityRecord["blockchain"];
+}> {
+  const response = await fetch(`${API_URL}/api/v1/records/${recordId}/verify`, { cache: "no-store" });
+  if (!response.ok) throw new Error("Unable to verify this record");
   return response.json();
 }
 

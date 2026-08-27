@@ -1,0 +1,14 @@
+[
+  {
+    "Location_ID": "E105981",
+    "Location_Name": "KINDER MORGAN STORM WATER",
+    "Location_Latitude": 49.3108,
+    "Location_Longitude": -123.1141,
+    "Observed_Date_Time": "2026-07-20T10:13:00-07:00",
+    "Medium": "Water - Fresh",
+    "observations": [
+      {"Observed_Property_Name": "0004", "Result": "7.5", "Unit": "pH units"},
+      {"Observed_Property_Name": "DO-F", "Result": "8.2", "Unit": "mg/L"}
+    ]
+  }
+]

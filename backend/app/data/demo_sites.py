@@ -1,0 +1,88 @@
+from __future__ import annotations
+
+# Curated Lower Mainland sites for local demo. Government stations sit on the
+# same coordinates as the community samples so the 50 m matcher succeeds
+# (False Creek 2019 vs province-wide EMS would otherwise not overlap).
+
+DEMO_SITES: list[dict] = [
+    {
+        "id": "E-FC-EAST",
+        "name": "False Creek",
+        "area": "East Basin",
+        "latitude": 49.2743,
+        "longitude": -123.1057,
+        "review": False,
+        "ems": {"PH-F": 7.82, "DO-F": 9.1, "0011": 325, "TEMF": 14.2, "1110": 0.18, "1111": 0.01, "1107": 118, "0147": 12},
+        "community": {"ph": 7.82, "oxygen": 9.1, "conductivity": 325, "water_temperature": 14.2, "nitrates": 0.18, "nitrites": 0.01, "hardness": 118, "e_coli": 12},
+    },
+    {
+        "id": "E-EB-KITS",
+        "name": "English Bay",
+        "area": "Kitsilano Point",
+        "latitude": 49.2817,
+        "longitude": -123.1512,
+        "review": False,
+        "ems": {"PH-F": 7.85, "DO-F": 9.18, "0011": 331, "TEMF": 14.45, "1110": 0.19, "1111": 0.012, "1107": 120, "0147": 13},
+        "community": {"ph": 7.85, "oxygen": 9.18, "conductivity": 331, "water_temperature": 14.45, "nitrates": 0.19, "nitrites": 0.012, "hardness": 120, "e_coli": 13},
+    },
+    {
+        "id": "E-BI-NARROWS",
+        "name": "Burrard Inlet",
+        "area": "Second Narrows",
+        "latitude": 49.3024,
+        "longitude": -123.0268,
+        "review": True,
+        "ems": {"PH-F": 7.88, "DO-F": 9.26, "0011": 337, "TEMF": 14.7, "1110": 0.20, "1111": 0.014, "1107": 122, "0147": 14},
+        "community": {"ph": 7.90, "oxygen": 7.56, "conductivity": 334, "water_temperature": 14.8, "nitrates": 0.36, "nitrites": 0.014, "hardness": 123, "e_coli": 35},
+    },
+    {
+        "id": "E-IONA",
+        "name": "Iona Beach",
+        "area": "North Arm",
+        "latitude": 49.2162,
+        "longitude": -123.2141,
+        "review": True,
+        "ems": {"PH-F": 7.91, "DO-F": 9.34, "0011": 343, "TEMF": 14.95, "1110": 0.21, "1111": 0.016, "1107": 124, "0147": 15},
+        "community": {"ph": 7.93, "oxygen": 7.64, "conductivity": 340, "water_temperature": 15.05, "nitrates": 0.37, "nitrites": 0.016, "hardness": 125, "e_coli": 36},
+    },
+    {
+        "id": "E-DEEP-COVE",
+        "name": "Deep Cove",
+        "area": "Indian Arm",
+        "latitude": 49.3268,
+        "longitude": -122.9486,
+        "review": False,
+        "ems": {"PH-F": 7.94, "DO-F": 9.42, "0011": 349, "TEMF": 15.2, "1110": 0.22, "1111": 0.018, "1107": 126, "0147": 16},
+        "community": {"ph": 7.94, "oxygen": 9.42, "conductivity": 349, "water_temperature": 15.2, "nitrates": 0.22, "nitrites": 0.018, "hardness": 126, "e_coli": 16},
+    },
+    {
+        "id": "E-STEVESTON",
+        "name": "Steveston Harbour",
+        "area": "Fraser River",
+        "latitude": 49.1241,
+        "longitude": -123.1832,
+        "review": True,
+        "ems": {"PH-F": 7.97, "DO-F": 9.5, "0011": 355, "TEMF": 15.45, "1110": 0.23, "1111": 0.02, "1107": 128, "0147": 17},
+        "community": {"ph": 7.99, "oxygen": 7.8, "conductivity": 352, "water_temperature": 15.55, "nitrates": 0.39, "nitrites": 0.02, "hardness": 129, "e_coli": 38},
+    },
+    {
+        "id": "E-AMBLESIDE",
+        "name": "Ambleside",
+        "area": "West Vancouver",
+        "latitude": 49.3247,
+        "longitude": -123.1475,
+        "review": False,
+        "ems": {"PH-F": 8.00, "DO-F": 9.58, "0011": 361, "TEMF": 15.7, "1110": 0.24, "1111": 0.022, "1107": 130, "0147": 18},
+        "community": {"ph": 8.00, "oxygen": 9.58, "conductivity": 361, "water_temperature": 15.7, "nitrates": 0.24, "nitrites": 0.022, "hardness": 130, "e_coli": 18},
+    },
+    {
+        "id": "E-BURNABY",
+        "name": "Burnaby Lake",
+        "area": "Still Creek",
+        "latitude": 49.2425,
+        "longitude": -122.9361,
+        "review": False,
+        "ems": {"PH-F": 8.03, "DO-F": 9.66, "0011": 367, "TEMF": 15.95, "1110": 0.25, "1111": 0.024, "1107": 132, "0147": 19},
+        "community": {"ph": 8.03, "oxygen": 9.66, "conductivity": 367, "water_temperature": 15.95, "nitrates": 0.25, "nitrites": 0.024, "hardness": 132, "e_coli": 19},
+    },
+]

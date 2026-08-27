@@ -223,6 +223,10 @@ __marimo__/
 node_modules/
 .next/
 
+# Local EMS extract (hundreds of MB). Import from this path; do not commit it.
+**/this_yr.csv.gz
+**/this_yr.csv
+
 # macOS
 .DS_Store
 contracts/practice_tim/

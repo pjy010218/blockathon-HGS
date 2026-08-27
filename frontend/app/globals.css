@@ -99,6 +99,14 @@ h1 em { color: var(--ocean); font-style: normal; font-weight: 400; }
 .popup-row b { line-height: 1.15; }
 .popup-row b small { display: block; margin-top: 3px; color: var(--muted); font-size: 8px; font-weight: 500; }
 .marker-popup > p { margin: 7px 0 0; color: var(--muted); font-size: 10px; }
+.popup-proof { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); display: grid; gap: 4px; }
+.popup-proof p { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; color: var(--muted); }
+.popup-proof button { margin-top: 6px; width: fit-content; border: 0; border-radius: 999px; padding: 6px 10px; background: var(--deep); color: white; font: 700 11px/1 var(--font); cursor: pointer; }
+.popup-proof button:disabled { opacity: .6; cursor: wait; }
+.popup-proof strong { font-size: 11px; }
+.proof-ok { color: #075f50; }
+.proof-fail { color: #9f361c; }
+.popup-proof span { color: var(--muted); font-size: 10px; }
 
 .content-view { padding: clamp(48px, 7vw, 92px) clamp(20px, 5vw, 72px) 80px; }
 .page-heading { max-width: 1280px; margin: 0 auto 48px; }

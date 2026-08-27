@@ -1,27 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from app.adapters.base import WaterDataSourceAdapter
-from app.models.parameters import CANONICAL_UNITS, UNDETECTED_TOKENS, canonical_field_for_ems_code
+from app.models.parameters import CANONICAL_UNITS, canonical_field_for_ems_code, parse_measurement_value
 from app.models.schemas import Location, Measurement, SourceKind, SourceProvenance, WaterQualityRecordCreate
-
-
-def _parse_result(raw: Any) -> Any:
-    if raw is None:
-        return None
-    if isinstance(raw, str) and raw.strip().upper() in UNDETECTED_TOKENS:
-        return None
-    if isinstance(raw, (int, float, bool)):
-        return raw
-    text = str(raw).strip()
-    if text.upper() in UNDETECTED_TOKENS:
-        return None
-    try:
-        return float(text)
-    except ValueError:
-        return None
+from app.services.dates import parse_observed_at
 
 
 class EnmodsAdapter(WaterDataSourceAdapter):
@@ -33,11 +17,7 @@ class EnmodsAdapter(WaterDataSourceAdapter):
 
     def normalize(self, payload: dict[str, Any]) -> WaterQualityRecordCreate:
         location_id = str(payload["Location_ID"])
-        observed_at = payload["Observed_Date_Time"]
-        if isinstance(observed_at, str):
-            observed_at_dt = datetime.fromisoformat(observed_at)
-        else:
-            observed_at_dt = observed_at
+        observed_at_dt = parse_observed_at(payload)
 
         measurements: list[Measurement] = []
         for observation in payload.get("observations") or []:
@@ -50,7 +30,7 @@ class EnmodsAdapter(WaterDataSourceAdapter):
             measurements.append(
                 Measurement(
                     field=field,
-                    value=_parse_result(raw_value),
+                    value=parse_measurement_value(raw_value),
                     unit=unit,
                     raw_value=raw_value,
                 )

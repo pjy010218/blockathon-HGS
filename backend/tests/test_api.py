@@ -3,7 +3,7 @@ from eth_account.messages import encode_defunct
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app, issuers, records, stations
+from app.main import app, ingest, issuers
 from app.models.schemas import WaterQualityRecordCreate
 from app.services.hashing import content_hash_for_record
 
@@ -15,8 +15,7 @@ OUTSIDER = Account.create()
 
 
 def setup_function() -> None:
-    records.clear()
-    stations.clear()
+    ingest.store.clear()
     issuers.reset(
         community=[COMMUNITY_ACCOUNT.address],
         government=[GOVERNMENT_ACCOUNT.address],

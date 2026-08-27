@@ -115,6 +115,7 @@ Frontend (port 3000) and API (port 8000) run as separate processes. CORS already
 
 - Node.js 20 or newer
 - Python 3.11 or newer
+- Docker (local Postgres)
 - MetaMask (community form signing)
 
 ### 1. Configure `.env`
@@ -129,6 +130,8 @@ cp .env.example .env
 |---|---|
 | `COMMUNITY_ISSUERS` | Your MetaMask address (comma-separated if several) |
 | `GOVERNMENT_ISSUERS` | The government/service wallet that will sign EMS imports |
+| `DEMO_SEED` | Set to `1` to import the packaged CSVs **only when the database is empty** (dates shifted once so the series end in 2025) |
+| `DATABASE_URL` | Postgres connection. Required if you want records to survive an API restart |
 
 Leave `BLOCKCHAIN_MODE=simulated` unless you have Sepolia RPC, a testnet key, and `ETH_CONTRACT_ADDRESS` set. Mainnet anchoring is refused.
 
@@ -142,15 +145,25 @@ set +a
 
 Alternatively, put `NEXT_PUBLIC_API_URL=http://localhost:8000` in `frontend/.env.local`. The frontend already defaults to that URL.
 
-### 2. Start the API
+### 2. Start Postgres
+
+```bash
+docker compose up -d db
+```
+
+Wait until `docker compose ps` shows the database as healthy.
+
+### 3. Start the API
 
 ```bash
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+DEMO_SEED=1 uvicorn app.main:app --reload --port 8000
 ```
+
+`DATABASE_URL` from `.env` is required. The API reads and writes Postgres only; it does not keep a copy of the records in process memory. The 2019→2025 date shift runs **only on an empty database**. Later API starts query the same rows and hashes; they are not shifted again.
 
 Check [http://localhost:8000/health](http://localhost:8000/health).
 
@@ -159,7 +172,7 @@ cd backend
 PYTHONPATH=. pytest
 ```
 
-### 3. Start the frontend (second terminal)
+### 4. Start the frontend (second terminal)
 
 ```bash
 cd frontend
@@ -171,11 +184,47 @@ Open [http://localhost:3000](http://localhost:3000).
 
 Do not run `npm run dev` and `npm run start` at the same time; both use the frontend `.next` directory.
 
-### 4. Optional: seed a government station
+### 5. Import the datasets
 
-Community submits are stored even without a nearby EMS station, but `displayable` stays `false` and they stay off the default record list until a government station exists within **50 m**.
+There is no separate import CLI. The API seeds Postgres **once**, when `water_records` is empty.
 
-Sign an EMS event with the government issuer key and `POST /api/v1/import/ems` (see Current API). After that, `GET /api/v1/stations` fills the form datalist, and a community reading at those coordinates can match.
+**Copy the EMS gzip** (not in git, ~364 MB) to `backend/data/this_yr.csv.gz`. The community CSV is already in the repo.
+
+```bash
+# from the repo root, after .env is loaded and Postgres is healthy
+cd backend
+source .venv/bin/activate
+DEMO_SEED=1 uvicorn app.main:app --reload --port 8000
+```
+
+That import:
+
+- reads `backend/app/data/dataset_download_5399.csv` (Fraser Riverkeeper / False Creek)
+- streams `backend/data/this_yr.csv.gz` (shared Community↔EMS parameters, grouped into events)
+- writes rows to Postgres only (the API does not keep a copy in process memory)
+- shifts each series so it **ends in 2025**, only on that first empty import (original timestamps stay in `raw_payload`)
+
+Expect on the order of **~75k records** and a couple of minutes. If the gzip is missing, the seed falls back to `backend/app/data/ems_lower_mainland.json` (a Lower Mainland extract from the same gzip).
+
+**If the database already has rows**, the seed does nothing. Empty it and start the API again:
+
+```bash
+docker compose exec db psql -U water -d water_audit -c "TRUNCATE water_records, water_stations;"
+```
+
+Optional paths if you keep the files elsewhere:
+
+```bash
+COMMUNITY_CSV_PATH=/path/to/dataset_download_5399.csv
+EMS_CSV_PATH=/path/to/this_yr.csv.gz
+DEMO_END_YEAR=2025
+```
+
+Open a site on the map and use **Check proof**. That calls `GET /api/v1/records/{id}/verify` and shows whether the stored SHA-256 hashes still match.
+
+The map shows only **comparison pairs** (community + EMS within 50 m). The community CSV has three False Creek sites, so you will see Olympic Village, Brokers Bay, and Vanier Park. There is no EMS station within 50 m of False Creek, so the demo copies nearest EMS chemistry onto those coordinates. Other EMS stations stay in Postgres and in `GET /api/v1/stations`. ☺ means the two datasets match on shared parameters; ☹ means at least one value differs.
+
+`GET /api/v1/map` is the payload the frontend uses. Without demo seed, community submits are stored even without a nearby EMS station, but `displayable` stays `false` until a government station exists within **50 m**. You can also `POST /api/v1/import/ems` with a signed government event.
 
 ### Production frontend build
 
@@ -192,6 +241,7 @@ npm run start
 | `GET` | `/health` | Reports API availability |
 | `POST` | `/api/v1/records` | Community ingest: signature + community issuer + 50 m station match |
 | `POST` | `/api/v1/import/ems` | Government EMS event: signature + government issuer; upserts the station |
+| `GET` | `/api/v1/map` | Station-matched EMS/community pairs for the map (match vs review) |
 | `GET` | `/api/v1/stations` | Lists government stations |
 | `GET` | `/api/v1/records` | Lists displayable records; `include_unmatched=true` includes unmatched community rows |
 | `GET` | `/api/v1/records/{id}` | Returns one record |

@@ -60,6 +60,13 @@ class IssuerRegistry:
                 f"This wallet is not registered as a {role} issuer."
             )
 
+    def allow(self, address: str, role: str) -> None:
+        normalized = address.lower()
+        if role == "community":
+            self._community.add(normalized)
+        elif role == "government":
+            self._government.add(normalized)
+
     def reset(self, *, community: list[str], government: list[str]) -> None:
         self._community = _normalize_configured_addresses(community)
         self._government = _normalize_configured_addresses(government)
@@ -69,6 +76,8 @@ def _normalize_configured_addresses(addresses: list[str]) -> set[str]:
     normalized: set[str] = set()
     for address in addresses:
         address = address.strip()
+        if not address:
+            continue
         if not Web3.is_address(address):
             raise IssuerConfigurationError(
                 "Issuer configuration contains an invalid Ethereum address."
