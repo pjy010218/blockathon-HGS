@@ -5,12 +5,32 @@ contribution credited. Roughly 20 minutes the first time.
 
 Everything runs on a testnet. No real money is involved at any point.
 
+## Which half do you need?
+
+**Reading records** — checking whether something is anchored, or seeing what the
+contracts hold. Every lookup is a `view` call, which costs nothing, so you need no
+test currency and no deployment. Either:
+
+- **In Remix.** Do steps 1, 3 and 4 below, skip the faucet, and then instead of
+  pressing **Deploy**, paste the deployed address from [../README.md](../README.md)
+  into the **At Address** field beside it. The contract appears under **Deployed
+  Contracts** and its blue functions run against the shared deployment.
+- **From a terminal**, if you would rather script it — see
+  [Reading the chain without Remix](#reading-the-chain-without-remix).
+
+**Deploying your own** — to see how the pieces fit, or to stand up a fresh
+instance. That is the full walkthrough below.
+
+> Deploying gives you a **separate** registry from the team's. Records you anchor
+> there are invisible to anyone using the shared deployment, and vice versa. Deploy
+> to learn; use the shared addresses for anything the team relies on.
+
 ## What you need
 
 | | |
 | --- | --- |
 | **MetaMask** | Browser extension. Install from [metamask.io](https://metamask.io) and create a wallet. |
-| **Sepolia ETH** | Free test currency for transaction fees. |
+| **Sepolia ETH** | Free test currency for transaction fees. Only needed to deploy or anchor; reading costs nothing. |
 | **Remix** | [remix.ethereum.org](https://remix.ethereum.org). Browser-based; nothing to install. |
 
 ## 1. Point MetaMask at Sepolia
