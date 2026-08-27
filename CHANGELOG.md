@@ -2,6 +2,11 @@
 
 Quick, chronological summaries of meaningful project changes. Implementation details belong in pull requests and technical specifications.
 
+## 2026-08-27 — Registry client alignment
+
+- Matched the frontend `getAnchor` ABI to the six-field on-chain Anchor tuple.
+- Added a backend Ethereum adapter for `WaterAuditRegistry` (`BLOCKCHAIN_MODE=ethereum`, testnet only). Simulated anchoring remains the default.
+
 ## 2026-08-27 — Frontend integration readiness
 
 - Introduced the Tideproof frontend with Map, Data, and Leaderboard views.

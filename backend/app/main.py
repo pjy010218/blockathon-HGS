@@ -85,8 +85,12 @@ def anchor_record(record_id: UUID) -> WaterQualityRecord:
         return record
 
     try:
-        record.blockchain = blockchain.anchor(record.content_hash)
-    except RuntimeError as error:
+        record.blockchain = blockchain.anchor(
+            record.content_hash,
+            source=record.source.kind.value,
+            source_record_id=record.source.source_record_id or str(record.id),
+        )
+    except (RuntimeError, ValueError) as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
     return record
 

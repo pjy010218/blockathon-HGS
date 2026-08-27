@@ -39,6 +39,16 @@ def test_create_and_verify_record() -> None:
     assert verification.json()["matches"] is True
 
 
+def test_anchor_defaults_to_simulated() -> None:
+    created = client.post(
+        "/api/v1/records",
+        json=_record("community", [{"field": "ph", "value": 7.2, "unit": "pH"}]),
+    ).json()
+    response = client.post(f"/api/v1/records/{created['id']}/anchor")
+    assert response.status_code == 200
+    assert response.json()["blockchain"]["status"] == "simulated"
+
+
 def test_comparison_preserves_missing_fields() -> None:
     government = client.post(
         "/api/v1/records",
