@@ -2,7 +2,7 @@ export type WaterQualityParameterKey =
   | "ph"
   | "dissolved_oxygen"
   | "conductivity"
-  | "water_temperature"
+  | "temperature"
   | "nitrate"
   | "nitrite"
   | "hardness"
@@ -24,8 +24,8 @@ export type WaterQualityParameter = {
 export const WATER_QUALITY_PARAMETERS: readonly WaterQualityParameter[] = [
   { key: "ph", label: "pH", unit: "pH", placeholder: "7.4", communityField: "ph", emsCodes: ["0004", "PH-F"] },
   { key: "dissolved_oxygen", label: "Dissolved oxygen", unit: "mg/L", placeholder: "9.1", communityField: "oxygen", emsCodes: ["DO-F"] },
-  { key: "conductivity", label: "Conductivity", unit: "µS/cm", placeholder: "325", communityField: "conductivity", emsCodes: ["0011", "EC-F"] },
-  { key: "water_temperature", label: "Water temperature", unit: "°C", placeholder: "12.8", communityField: "water_temperature", emsCodes: ["TEMF"] },
+  { key: "conductivity", label: "Conductivity", unit: "µS/cm", placeholder: "325", communityField: "conductivity", emsCodes: ["0011", "EC-F", "SC-F"] },
+  { key: "temperature", label: "Water temperature", unit: "°C", placeholder: "12.8", communityField: "water_temperature", emsCodes: ["TEMF"] },
   { key: "nitrate", label: "Nitrate", unit: "mg/L", placeholder: "0.18", communityField: "nitrates", emsCodes: ["1110"] },
   { key: "nitrite", label: "Nitrite", unit: "mg/L", placeholder: "0.01", communityField: "nitrites", emsCodes: ["1111"] },
   { key: "hardness", label: "Hardness", unit: "mg/L as CaCO₃", placeholder: "118", communityField: "hardness", emsCodes: ["1107"] },

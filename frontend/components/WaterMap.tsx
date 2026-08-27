@@ -21,6 +21,8 @@ type WaterMarker = {
   position: [number, number];
   status: MarkerStatus;
   compared: string;
+  matchedStationId: string;
+  displayable: boolean;
   readings: MarkerReading[];
 };
 
@@ -59,6 +61,8 @@ const markerSites = [
 
 const markers: WaterMarker[] = markerSites.map((site, index) => ({
   ...site,
+  matchedStationId: `EMS-DEMO-${String(index + 1).padStart(3, "0")}`,
+  displayable: true,
   readings: placeholderReadings(index - 3, site.status),
 }));
 
@@ -73,7 +77,9 @@ function faceIcon(status: MarkerStatus) {
 }
 
 export default function WaterMap({ filter }: { filter: "all" | MarkerStatus }) {
-  const visible = markers.filter((marker) => filter === "all" || marker.status === filter);
+  // BACKEND INTEGRATION: API records with displayable=false must remain out of
+  // this default viewer; comparisons must share the same matched station ID.
+  const visible = markers.filter((marker) => marker.displayable && (filter === "all" || marker.status === filter));
 
   return (
     <MapContainer center={[49.274, -123.105]} zoom={11} minZoom={7} scrollWheelZoom className="leaflet-map" zoomControl>
@@ -100,7 +106,7 @@ export default function WaterMap({ filter }: { filter: "all" | MarkerStatus }) {
                   );
                 })}
               </div>
-              <p>E. coli may be reported as MPN/100mL by EMS · Compared {marker.compared}</p>
+              <p>{marker.matchedStationId} · E. coli may be reported as MPN/100mL by EMS · Compared {marker.compared}</p>
             </div>
           </Popup>
         </Marker>
