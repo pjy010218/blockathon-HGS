@@ -66,7 +66,8 @@ export type MapSite = {
   name: string;
   area: string;
   position: [number, number] | number[];
-  status: "match" | "review";
+  status: "match" | "review" | "official";
+  kind?: "pair" | "official";
   matched_station_id: string;
   displayable: boolean;
   compared: string;
@@ -75,4 +76,21 @@ export type MapSite = {
   government_record_id?: string | null;
   community_hash?: string | null;
   government_hash?: string | null;
+  community_transaction_hash?: string | null;
+  government_transaction_hash?: string | null;
+  community_transaction_url?: string | null;
+  government_transaction_url?: string | null;
+  community_anchor_status?: string | null;
+  government_anchor_status?: string | null;
+};
+
+export type RecentRecord = {
+  id: string;
+  source_kind: "government" | "community" | "other";
+  location_name?: string | null;
+  observed_at: string;
+  content_hash: string;
+  anchor_status: string;
+  transaction_hash?: string | null;
+  transaction_url?: string | null;
 };

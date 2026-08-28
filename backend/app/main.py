@@ -13,6 +13,7 @@ from app.models.schemas import (
     ComparisonResponse,
     EmsImportRequest,
     MapSite,
+    RecentRecord,
     SignedRecordRequest,
     SourceKind,
     StationResponse,
@@ -21,6 +22,7 @@ from app.models.schemas import (
 )
 from app.services.blockchain import BlockchainService
 from app.services.comparison import compare_records
+from app.services.anchors import transaction_url
 from app.services.database import MemoryRecordStore, open_store
 from app.services.hashing import content_hash_for_record
 from app.services.ingest import DuplicateRecord, IngestService
@@ -87,7 +89,24 @@ def list_stations() -> list[StationResponse]:
 
 @app.get("/api/v1/map", response_model=list[MapSite])
 def list_map_sites() -> list[MapSite]:
-    return build_map_sites(store.records_for_map())
+    return build_map_sites(store.records_for_map(), store.list_stations())
+
+
+@app.get("/api/v1/records/recent", response_model=list[RecentRecord])
+def list_recent_records(limit: int = Query(default=12, ge=1, le=50)) -> list[RecentRecord]:
+    return [
+        RecentRecord(
+            id=record.id,
+            source_kind=record.source.kind.value,
+            location_name=record.location.name,
+            observed_at=record.observed_at,
+            content_hash=record.content_hash,
+            anchor_status=record.blockchain.status.value,
+            transaction_hash=record.blockchain.transaction_hash,
+            transaction_url=transaction_url(record.blockchain),
+        )
+        for record in store.recent_records(limit)
+    ]
 
 
 @app.get("/api/v1/records", response_model=list[WaterQualityRecord])
@@ -190,6 +209,7 @@ def verify_record(record_id: UUID) -> dict[str, object]:
         "recalculated_hash": recalculated_hash,
         "matches": recalculated_hash == record.content_hash,
         "anchor": record.blockchain,
+        "transaction_url": transaction_url(record.blockchain),
     }
 
 

@@ -165,6 +165,7 @@ class MapSite(BaseModel):
     area: str
     position: list[float]
     status: str
+    kind: str = "pair"
     matched_station_id: str
     displayable: bool = True
     compared: str
@@ -173,3 +174,21 @@ class MapSite(BaseModel):
     government_record_id: UUID | None = None
     community_hash: str | None = None
     government_hash: str | None = None
+    community_transaction_hash: str | None = None
+    government_transaction_hash: str | None = None
+    community_transaction_url: str | None = None
+    government_transaction_url: str | None = None
+    community_anchor_status: str | None = None
+    government_anchor_status: str | None = None
+
+
+class RecentRecord(BaseModel):
+    id: UUID
+    source_kind: str
+    location_name: str | None = None
+    observed_at: datetime
+    content_hash: str
+    anchor_status: str
+    transaction_hash: str | None = None
+    transaction_url: str | None = None
+

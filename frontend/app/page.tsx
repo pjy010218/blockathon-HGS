@@ -2,13 +2,13 @@
 
 import dynamic from "next/dynamic";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { ApiError, listMapSites, listStations, submitCommunityRecord } from "../lib/api";
+import { ApiError, listMapSites, listRecentRecords, listStations, submitCommunityRecord } from "../lib/api";
 import {
   buildCommunityRecord,
   signCommunityRecord,
   type WalletProvider,
 } from "../lib/community-submission";
-import type { GovernmentStation, MapSite } from "../lib/types";
+import type { GovernmentStation, MapSite, RecentRecord } from "../lib/types";
 import { WATER_QUALITY_PARAMETERS } from "../lib/water-quality-schema";
 
 const WaterMap = dynamic(() => import("../components/WaterMap"), {
@@ -121,21 +121,31 @@ export default function Home() {
 }
 
 function MapView({ onOpenData }: { onOpenData: () => void }) {
-  const [filter, setFilter] = useState<"all" | "match" | "review">("all");
+  const [filter, setFilter] = useState<"all" | "match" | "review" | "official">("all");
   const [sites, setSites] = useState<MapSite[]>([]);
+  const [recent, setRecent] = useState<RecentRecord[]>([]);
   const [mapNote, setMapNote] = useState("Loading comparisons…");
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
   useEffect(() => {
     let active = true;
-    void listMapSites()
-      .then((items) => {
+    void Promise.all([listMapSites(), listRecentRecords(10)])
+      .then(([items, entries]) => {
         if (!active) return;
         setSites(items);
-        setMapNote(items.length ? "Imported pairs with stored proofs · records, not verdicts." : "No matched pairs yet. Start the API with DEMO_SEED=1 and DATABASE_URL.");
+        setRecent(entries);
+        const pairs = items.filter((site) => site.status !== "official").length;
+        const official = items.filter((site) => site.status === "official").length;
+        setMapNote(
+          items.length
+            ? `${pairs} compared community sites · ${official} official EMS stations in the Lower Mainland.`
+            : "No matched pairs yet. Start the API with DEMO_SEED=1 and DATABASE_URL.",
+        );
       })
       .catch(() => {
         if (!active) return;
         setSites([]);
+        setRecent([]);
         setMapNote("API map comparisons are not available yet.");
       });
     return () => { active = false; };
@@ -143,11 +153,50 @@ function MapView({ onOpenData }: { onOpenData: () => void }) {
 
   const matchCount = sites.filter((site) => site.status === "match").length;
   const reviewCount = sites.filter((site) => site.status === "review").length;
+  const officialCount = sites.filter((site) => site.status === "official").length;
 
   return <section className="map-view view-enter" aria-labelledby="map-title">
-    <div className="map-heading"><div><p className="kicker"><span className="live-pulse" /> Live comparison map</p><h1 id="map-title">Where the water<br />records <em>agree.</em></h1></div><p className="map-intro">Community and official readings, compared site by site across British Columbia.</p></div>
-    <div className="map-frame"><WaterMap filter={filter} sites={sites} /><div className="map-tools" aria-label="Filter map markers"><button className={filter === "all" ? "selected" : ""} onClick={() => setFilter("all")}>All sites <b>{sites.length}</b></button><button className={filter === "match" ? "selected" : ""} onClick={() => setFilter("match")}><span className="legend-face happy">☺</span> Match <b>{matchCount}</b></button><button className={filter === "review" ? "selected" : ""} onClick={() => setFilter("review")}><span className="legend-face sad">☹</span> Needs review <b>{reviewCount}</b></button></div><div className="map-note"><Icon name="shield" /><span><b>Records, not verdicts.</b> {mapNote}</span></div></div>
-    <div className="map-footer"><p><strong>Last comparison</strong> {sites[0]?.compared ?? "Waiting for API data"}</p><button className="text-button" onClick={onOpenData}>Contribute a reading <Icon name="arrow" /></button></div>
+    <div className="map-heading"><div><p className="kicker"><span className="live-pulse" /> Live comparison map</p><h1 id="map-title">Where the water<br />records <em>agree.</em></h1></div><p className="map-intro">Community and official readings, compared site by site across British Columbia. Official EMS stations appear as smaller marks when there is no community pair within 50 m.</p></div>
+    <div className="map-frame"><WaterMap filter={filter} sites={sites} /><div className="map-tools" aria-label="Filter map markers"><button className={filter === "all" ? "selected" : ""} onClick={() => setFilter("all")}>All sites <b>{sites.length}</b></button><button className={filter === "match" ? "selected" : ""} onClick={() => setFilter("match")}><span className="legend-face happy">☺</span> Match <b>{matchCount}</b></button><button className={filter === "review" ? "selected" : ""} onClick={() => setFilter("review")}><span className="legend-face sad">☹</span> Needs review <b>{reviewCount}</b></button><button className={filter === "official" ? "selected" : ""} onClick={() => setFilter("official")}><span className="legend-dot" /> Official <b>{officialCount}</b></button></div></div>
+    <p className="map-caption"><Icon name="shield" /><span><b>Records, not verdicts.</b> {mapNote}</span></p>
+    <div className="recent-ledger" aria-labelledby="recent-title">
+      <div className="recent-heading">
+        <div>
+          <p className="kicker">Latest ingest</p>
+          <h2 id="recent-title">Newest hashed records</h2>
+        </div>
+        <button className="text-button" onClick={onOpenData}>Contribute a reading <Icon name="arrow" /></button>
+      </div>
+      {recent.length ? (
+        <ul className="recent-list">
+          {recent.map((entry) => {
+            const verify = `${apiUrl}/api/v1/records/${entry.id}/verify`;
+            const when = new Date(entry.observed_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+            return (
+              <li key={entry.id}>
+                <div>
+                  <b>{entry.location_name || "Unnamed site"}</b>
+                  <small>{entry.source_kind === "community" ? "Community" : "EMS"} · {when}</small>
+                </div>
+                <code>{entry.content_hash.slice(0, 10)}…</code>
+                <div className="recent-links">
+                  {entry.transaction_url ? (
+                    <a href={entry.transaction_url} target="_blank" rel="noreferrer">Explorer</a>
+                  ) : (
+                    <span title={entry.transaction_hash ?? undefined}>
+                      {entry.anchor_status === "simulated" ? "Simulated locally" : "Not anchored"}
+                    </span>
+                  )}
+                  <a href={verify} target="_blank" rel="noreferrer">Proof JSON</a>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="recent-empty">Waiting for imported records.</p>
+      )}
+    </div>
   </section>;
 }
 

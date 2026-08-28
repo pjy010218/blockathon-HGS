@@ -34,10 +34,13 @@ def test_seed_from_files_shifts_dates_to_end_in_2025_and_pairs_sites() -> None:
     assert max(item.observed_at.year for item in government) == 2025
     assert all(item.displayable for item in community)
 
-    sites = build_map_sites(ingest.store.all_records(include_unmatched=True))
-    assert len(sites) == 1
-    assert sites[0].name == "Olympic Village"
-    assert sites[0].compared.startswith("2025-12-11")
+    sites = build_map_sites(ingest.store.all_records(include_unmatched=True), ingest.store.list_stations())
+    pairs = [site for site in sites if site.kind == "pair"]
+    assert len(pairs) == 1
+    assert pairs[0].name == "Olympic Village"
+    assert pairs[0].compared.startswith("2025-12-11")
+    assert pairs[0].community_hash
+    assert pairs[0].government_hash
 
 
 def test_seed_from_ems_csv_groups_rows_and_shifts_dates() -> None:
@@ -67,8 +70,9 @@ def test_map_uses_latest_observation_per_source() -> None:
         ems_events=FIXTURES / "ems_events.json",
         end_year=2025,
     )
-    sites = build_map_sites(ingest.store.all_records(include_unmatched=True))
+    sites = build_map_sites(ingest.store.all_records(include_unmatched=True), ingest.store.list_stations())
+    pair = next(site for site in sites if site.kind == "pair")
     community_reading = next(
-        reading for reading in sites[0].readings if reading.parameter == "ph"
+        reading for reading in pair.readings if reading.parameter == "ph"
     )
     assert community_reading.community == "7.9"

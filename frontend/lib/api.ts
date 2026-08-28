@@ -1,5 +1,5 @@
 import type { SignedCommunitySubmission } from "./community-submission";
-import type { ComparisonResponse, GovernmentStation, MapSite, WaterQualityRecord } from "./types";
+import type { ComparisonResponse, GovernmentStation, MapSite, RecentRecord, WaterQualityRecord } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -27,12 +27,19 @@ export async function listMapSites(): Promise<MapSite[]> {
   return response.json();
 }
 
+export async function listRecentRecords(limit = 10): Promise<RecentRecord[]> {
+  const response = await fetch(`${API_URL}/api/v1/records/recent?limit=${limit}`, { cache: "no-store" });
+  if (!response.ok) throw new Error("Unable to load recent records");
+  return response.json();
+}
+
 export async function verifyRecord(recordId: string): Promise<{
   record_id: string;
   stored_hash: string;
   recalculated_hash: string;
   matches: boolean;
   anchor: WaterQualityRecord["blockchain"];
+  transaction_url?: string | null;
 }> {
   const response = await fetch(`${API_URL}/api/v1/records/${recordId}/verify`, { cache: "no-store" });
   if (!response.ok) throw new Error("Unable to verify this record");

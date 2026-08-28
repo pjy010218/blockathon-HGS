@@ -8,6 +8,7 @@ from sqlalchemy import Boolean, DateTime, JSON, Float, String, Uuid, create_engi
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 from app.models.schemas import WaterQualityRecord
+from app.services.map_sites import station_in_lower_mainland
 from app.services.stations import Station, StationRegistry
 
 
@@ -88,15 +89,28 @@ class MemoryRecordStore:
     def station_registry(self) -> StationRegistry:
         return self._stations
 
+    def recent_records(self, limit: int = 12) -> list[WaterQualityRecord]:
+        items = sorted(self._records.values(), key=lambda item: item.observed_at, reverse=True)
+        return items[:limit]
+
     def records_for_map(self) -> list[WaterQualityRecord]:
         community = [item for item in self._records.values() if item.source.kind.value == "community"]
-        station_ids = {item.matched_station_id for item in community if item.matched_station_id}
-        government = [
-            item
-            for item in self._records.values()
-            if item.source.kind.value == "government" and item.matched_station_id in station_ids
-        ]
-        return community + government
+        paired_ids = {item.matched_station_id for item in community if item.matched_station_id}
+        official_ids = {
+            station.id
+            for station in self.list_stations()
+            if station_in_lower_mainland(station) and not station.id.startswith("DEMO-")
+        }
+        wanted = paired_ids | official_ids
+        latest: dict[str, WaterQualityRecord] = {}
+        for item in self._records.values():
+            if item.source.kind.value != "government" or item.matched_station_id not in wanted:
+                continue
+            station_id = item.matched_station_id
+            current = latest.get(station_id)
+            if current is None or item.observed_at > current.observed_at:
+                latest[station_id] = item
+        return community + list(latest.values())
 
     def clear(self) -> None:
         self._records.clear()
@@ -238,26 +252,53 @@ class SqlRecordStore:
             registry.upsert(station)
         return registry
 
-    def records_for_map(self) -> list[WaterQualityRecord]:
+    def recent_records(self, limit: int = 12) -> list[WaterQualityRecord]:
         with self._session() as session:
-            community_rows = list(
-                session.scalars(select(RecordRow).where(RecordRow.source_kind == "community"))
+            rows = session.scalars(
+                select(RecordRow).order_by(RecordRow.observed_at.desc()).limit(limit)
             )
-            station_ids = {row.matched_station_id for row in community_rows if row.matched_station_id}
-            government_rows: list[RecordRow] = []
-            if station_ids:
-                government_rows = list(
-                    session.scalars(
-                        select(RecordRow).where(
-                            RecordRow.source_kind == "government",
-                            RecordRow.matched_station_id.in_(station_ids),
-                        )
+            return [WaterQualityRecord.model_validate(row.body) for row in rows]
+
+    def _latest_government_for_stations(self, station_ids: set[str]) -> list[WaterQualityRecord]:
+        if not station_ids:
+            return []
+        with self._session() as session:
+            query = select(RecordRow).where(
+                RecordRow.source_kind == "government",
+                RecordRow.matched_station_id.in_(station_ids),
+            )
+            if self.engine.dialect.name == "postgresql":
+                rows = session.scalars(
+                    query.distinct(RecordRow.matched_station_id).order_by(
+                        RecordRow.matched_station_id,
+                        RecordRow.observed_at.desc(),
                     )
                 )
-            return [
+                return [WaterQualityRecord.model_validate(row.body) for row in rows]
+            records = [WaterQualityRecord.model_validate(row.body) for row in session.scalars(query)]
+        latest: dict[str, WaterQualityRecord] = {}
+        for record in records:
+            station_id = record.matched_station_id
+            if not station_id:
+                continue
+            current = latest.get(station_id)
+            if current is None or record.observed_at > current.observed_at:
+                latest[station_id] = record
+        return list(latest.values())
+
+    def records_for_map(self) -> list[WaterQualityRecord]:
+        with self._session() as session:
+            community = [
                 WaterQualityRecord.model_validate(row.body)
-                for row in [*community_rows, *government_rows]
+                for row in session.scalars(select(RecordRow).where(RecordRow.source_kind == "community"))
             ]
+        paired_ids = {item.matched_station_id for item in community if item.matched_station_id}
+        official_ids = {
+            station.id
+            for station in self.list_stations()
+            if station_in_lower_mainland(station) and not station.id.startswith("DEMO-")
+        }
+        return community + self._latest_government_for_stations(paired_ids | official_ids)
 
     def clear(self) -> None:
         with self._session() as session:

@@ -2,6 +2,11 @@
 
 Quick, chronological summaries of meaningful project changes. Implementation details belong in pull requests and technical specifications.
 
+## 2026-08-28 — Fuller map, transaction links, recent ingest
+
+- The map now also shows official Lower Mainland EMS stations that have no community pair within 50 m.
+- Check proof and the new recent-records list link to the stored verify endpoint, and to Sepolia Etherscan when a real transaction exists.
+
 ## 2026-08-27 — Full EMS gzip import
 
 - Demo seed now streams `this_yr.csv.gz` into Postgres (shared parameters, grouped events). The gzip stays local and is gitignored.

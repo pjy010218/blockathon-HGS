@@ -220,11 +220,11 @@ EMS_CSV_PATH=/path/to/this_yr.csv.gz
 DEMO_END_YEAR=2025
 ```
 
-Open a site on the map and use **Check proof**. That calls `GET /api/v1/records/{id}/verify` and shows whether the stored SHA-256 hashes still match.
+Open a site on the map to see the **record hash** (fingerprint of the water data) and **on-chain** status. Simulated anchors stay labeled *Simulated locally* until a Sepolia transaction exists, then **View on explorer** opens Etherscan. **Check hashes** re-computes the stored SHA-256 hashes in the popup. **Community JSON** / **EMS JSON** open `GET /api/v1/records/{id}/verify`.
 
-The map shows only **comparison pairs** (community + EMS within 50 m). The community CSV has three False Creek sites, so you will see Olympic Village, Brokers Bay, and Vanier Park. There is no EMS station within 50 m of False Creek, so the demo copies nearest EMS chemistry onto those coordinates. Other EMS stations stay in Postgres and in `GET /api/v1/stations`. ☺ means the two datasets match on shared parameters; ☹ means at least one value differs.
+The map shows **comparison pairs** (community + EMS within 50 m) as ☺/☹ markers, plus **official EMS stations** in the Lower Mainland that have no community pair. The community CSV has three False Creek sites: Olympic Village, Brokers Bay, and Vanier Park. Volunteer Park, New Brighton, and Vanier Park Boat Ramp are not in this CSV. There is no EMS station within 50 m of False Creek, so the demo copies nearest EMS chemistry onto those three coordinates. ☺ means the two datasets match on shared parameters; ☹ means at least one value differs.
 
-`GET /api/v1/map` is the payload the frontend uses. Without demo seed, community submits are stored even without a nearby EMS station, but `displayable` stays `false` until a government station exists within **50 m**. You can also `POST /api/v1/import/ems` with a signed government event.
+`GET /api/v1/map` is the payload the frontend uses. `GET /api/v1/records/recent` fills the list under the map. Without demo seed, community submits are stored even without a nearby EMS station, but `displayable` stays `false` until a government station exists within **50 m**. You can also `POST /api/v1/import/ems` with a signed government event.
 
 ### Production frontend build
 
@@ -241,11 +241,12 @@ npm run start
 | `GET` | `/health` | Reports API availability |
 | `POST` | `/api/v1/records` | Community ingest: signature + community issuer + 50 m station match |
 | `POST` | `/api/v1/import/ems` | Government EMS event: signature + government issuer; upserts the station |
-| `GET` | `/api/v1/map` | Station-matched EMS/community pairs for the map (match vs review) |
+| `GET` | `/api/v1/map` | Compared False Creek pairs plus official Lower Mainland EMS stations |
 | `GET` | `/api/v1/stations` | Lists government stations |
 | `GET` | `/api/v1/records` | Lists displayable records; `include_unmatched=true` includes unmatched community rows |
+| `GET` | `/api/v1/records/recent` | Newest ingested records for the map ledger |
 | `GET` | `/api/v1/records/{id}` | Returns one record |
-| `GET` | `/api/v1/records/{id}/verify` | Recalculates and compares its content hash |
+| `GET` | `/api/v1/records/{id}/verify` | Recalculates the content hash; includes a Sepolia transaction URL when anchored |
 | `POST` | `/api/v1/records/{id}/anchor` | Runs the configured blockchain adapter |
 | `POST` | `/api/v1/comparisons` | Returns neutral field-by-field differences |
 

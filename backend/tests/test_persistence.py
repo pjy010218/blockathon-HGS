@@ -46,11 +46,7 @@ def test_initial_import_persists_hash_and_survives_reload(tmp_path) -> None:
     assert reloaded.list_stations()
     mapped = reloaded.records_for_map()
     assert mapped
-    assert all(
-        item.source.kind.value == "community"
-        or item.matched_station_id in {record.matched_station_id for record in mapped if record.source.kind.value == "community"}
-        for item in mapped
-    )
+    assert any(record.source.kind.value == "community" for record in mapped)
     by_id = {record.id: record for record in loaded}
     for record_id, digest in hashes.items():
         record = by_id[record_id]

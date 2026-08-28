@@ -311,6 +311,26 @@ def test_create_and_verify_record() -> None:
     verification = client.get(f"/api/v1/records/{record['id']}/verify")
     assert verification.status_code == 200
     assert verification.json()["matches"] is True
+    assert verification.json()["transaction_url"] is None
+
+
+def test_recent_records_are_newest_first() -> None:
+    first = _import_ems()
+    recent = client.get("/api/v1/records/recent", params={"limit": 5})
+    assert recent.status_code == 200
+    rows = recent.json()
+    assert rows[0]["id"] == first["id"]
+    assert rows[0]["source_kind"] == "government"
+    assert "content_hash" in rows[0]
+
+
+def test_map_includes_official_lower_mainland_station() -> None:
+    _import_ems()
+    sites = client.get("/api/v1/map").json()
+    official = [site for site in sites if site["kind"] == "official"]
+    assert official
+    assert official[0]["id"] == "E207969"
+    assert official[0]["government_record_id"]
 
 
 def test_anchor_defaults_to_simulated() -> None:
