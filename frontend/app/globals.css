@@ -202,7 +202,7 @@ textarea { resize: vertical; }
 .lock-overlay > span { margin: auto auto 12px; width: 52px; height: 52px; display: grid; place-items: center; background: white; color: var(--ocean); border-radius: 50%; box-shadow: 0 8px 24px rgba(8,47,73,.14); }
 .lock-overlay b { font-size: 18px; }
 .lock-overlay p { color: var(--muted); margin: 5px 0; font-size: 13px; }
-.submission-banner { position: relative; z-index: 5; margin-top: 18px; padding: 14px; display: flex; align-items: flex-start; gap: 11px; border-radius: 10px; background: var(--deep); color: white; box-shadow: 0 10px 30px rgba(8,47,73,.13); }
+.submission-banner { position: relative; z-index: 5; max-width: 1280px; margin: 0 auto 24px; scroll-margin-top: 90px; padding: 14px 16px; display: flex; align-items: flex-start; gap: 11px; border-radius: 10px; background: var(--deep); color: white; box-shadow: 0 10px 30px rgba(8,47,73,.13); }
 .submission-banner.submitted { background: #075f55; }
 .submission-banner.unmatched { background: #86501d; }
 .submission-banner.error { background: #923d27; }
